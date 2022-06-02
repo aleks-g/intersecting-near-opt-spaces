@@ -1,0 +1,159 @@
+# SPDX-FileCopyrightText: 2022 Koen van Greevenbroek & Aleksander Grochowicz
+#
+# SPDX-License-Identifier: CC0-1.0
+
+# The name needs to match the filename of this config.
+name: "smalldefault"
+
+# The scenario config is used only in order to determine which results
+# are required for the various "*_all_*" Snakemake rules. Each entry
+# corresponds to a Snakemake wildcard. Multiple values may be
+# specified for each wildcard; all combinations will be computed. See
+# the Snakefile for a description of each wildcard.
+scenario:
+  year: ["1980-2019"]
+  simpl: [""]
+  clusters: ["35"]
+  ll: ["c1.25"]
+  opts: ["Co2L-3H"]
+  eps: ["0.05uni1980-2019"]
+  method: ["mean", "exact", "naive", "conservative"]
+  operation_method: ["-single-years"]
+
+# The following config section relates to how the near-optimal
+# feasible space is approximated.
+near_opt_approx:
+  # Essential configuration:
+  
+  # Number of iterations.
+  iterations: 150
+  # Direction generation method, either "facets", "random-uniform",
+  # "random-lhc", "maximal-centre" or "maximal-centre-then-facets".
+  directions: "maximal-centre-then-facets"
+  # Minimum angle threshold between directions.
+  directions_angle_separation: 45
+  # Convergence method, either "centre" or "volume".
+  conv_method: "centre"
+  # Convergence epsilon.
+  conv_epsilon: 0
+  # Number of iterations for which the convergence criterion must be
+  # below the converge epsilon before the approximation stops.
+  conv_iterations: 150
+  # The number of parallel solvers used in the near-optimal feasible
+  # space approximation.
+  num_parallel_solvers: 4
+
+  # Optional configuration:
+  
+  # Command line options for the `qhull` program, which is used to
+  # compute convex hulls, may be defined here. The default options
+  # usually work well in which case this is not needed. If qhull fails
+  # for any reason, one could try to options "W1e-6 C1e-6 Q12" to get
+  # an approximate convex hull computation (see
+  # http://www.qhull.org/html/qh-optq.htm).
+  # qhull_options: "Qx"
+
+  # Angle tolerance: when no new directions are found which are at
+  # least this number of degrees away from previously used directions,
+  # we stop the approximation.
+  # angle_tolerance: 0.1
+
+# Specification of the basis we project the near-optimal feasible space onto. 
+projection:
+  solar:
+    - {c: "Generator", v: "p_nom", carrier: "solar", weight: "capital_cost", scale_by_years: True}
+  onwind:
+    - {c: "Generator", v: "p_nom", carrier: "onwind", weight: "capital_cost", scale_by_years: True}
+  offwind:
+    - {c: "Generator", v: "p_nom", carrier: "offwind-ac", weight: "capital_cost", scale_by_years: True}
+    - {c: "Generator", v: "p_nom", carrier: "offwind-dc", weight: "capital_cost", scale_by_years: True}
+  gas:
+    - {c: "Generator", v: "p_nom", carrier: "OCGT", weight: "capital_cost", scale_by_years: True}
+
+
+# The following section is used as pypsa-eur configuration (updating
+# the default pypsa-eur config)
+pypsa-eur:
+  # Countries which are available:
+  countries: ["AT", "BE", "BG", "CH", "CZ", "DE", "DK", "EE", "ES", "FI", "FR", "GB", "GR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "ME", "MK", "NL", "NO", "PL", "PT", "RO", "RS", "SE", "SI", "SK"]
+
+  snapshots:
+    # The date (in MM-DD) at which each year is taken to start. If not
+    # specified, this is taken to be "01-01", meaning the years start
+    # on the 1st of January by default. By setting this date to
+    # sometime in the summer, however, one can preserve the
+    # meteorological winter within each 1-year period.
+    # P.S. Please do not make the boundary a leap day.
+    year_boundary: "07-01"
+
+  # Specify the year used to produce a simplified clustered network. A
+  # particular year needs to be chosen since the clustering depends on
+  # load and capacity factor time series, but we want this year (and
+  # hence the clustering) to be the same over all model runs in order
+  # to get the same network topology. Make sure you have the ERA5
+  # cutout for this year (and the next, if `year_boundary` is not
+  # "01-01").
+  net_clustering_year: "2019"
+
+  # For all the following configuration, see the PyPSA-Eur documentation.
+  electricity:
+    co2limit: 7.75e+7 # 0.05 * 3.1e9*0.5
+    co2base: 1.487e+9
+
+    extendable_carriers:
+      Generator: ["OCGT"]
+      StorageUnit: ["battery", "H2"]
+      Store: []
+      Link: []
+
+    # Add existing nuclear power plants to the model, but no existing renewables.
+    conventional_carriers: ["nuclear"] # nuclear, oil, OCGT, CCGT, coal, lignite, geothermal, biomass
+    renewable_capacities_from_OPSD: [] # onwind, offwind, solar
+
+    # Remove nuclear from Germany.
+    powerplants_filter: "(Country != 'DE') or (Fueltype != 'Nuclear')"
+
+  load:
+    # Baseline in European Commission scenario from
+    # https://ec.europa.eu/clima/eu-action/european-green-deal/2030-climate-target-plan_en
+    scaling_factor: 1.13
+
+  atlite:
+    nprocesses: 4
+    show_progress: False # This improves performance by a lot.
+    cutouts:
+      # use "base" to determine geographical bounds and time span from config.
+      base: 
+        module: "era5"
+
+  renewable:
+    # Note that the cutouts have been renamed from default PyPSA-Eur.
+    onwind:
+      cutout: "europe-era5"
+    offwind-ac:
+      cutout: "europe-era5"
+    offwind-dc:
+      cutout: "europe-era5"
+    solar:
+      cutout: "europe-era5"
+    hydro:
+      cutout: "europe-era5"
+
+  solving:
+    options:
+      formulation: "kirchhoff"
+      noisy_costs: False
+      skip_iterations: True
+      track_iterations: False
+    tmpdir: "./tmp/"
+    solver:
+      name: "gurobi"
+      # LogToConsole: 0
+      threads: 2
+      method: 2 # barrier
+      crossover: 0
+      BarConvTol: 1.e-5
+      FeasibilityTol: 1.e-6
+      AggFill: 0
+      PreDual: 0
+      GURO_PAR_BARDENSETHRESH: 200

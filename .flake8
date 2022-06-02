@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: 2022 Koen van Greevenbroek & Aleksander Grochowicz
+#
+# SPDX-License-Identifier: CC0-1.0
+
+[flake8]
+max-line-length = 88
+extend-select = C, B, B950, W504
+extend-ignore = E203, E501, W503
+docstring-convention=numpy
+
+# In snakemake scripts we have a global variable `snakemake` which is
+# not defined in the script. Ignore "undefined variable" warnings in
+# these scripts.
+per-file-ignores =
+    workflow/scripts/*.py:F821

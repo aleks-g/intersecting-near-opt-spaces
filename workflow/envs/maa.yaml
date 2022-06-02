@@ -1,0 +1,65 @@
+# SPDX-FileCopyrightText: 2022 Aleks Grochowicz & Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC0-1.0
+
+name: maa
+channels:
+  - conda-forge
+  - bioconda
+  - http://conda.anaconda.org/gurobi
+dependencies:
+  - python
+  - pip
+  - mamba
+
+  - pypsa
+  - atlite
+  - dask
+
+  - gurobi
+
+  # Dependencies of the workflow itself
+  - xlrd
+  - openpyxl
+  - pycountry
+  - seaborn
+  - snakemake-minimal
+  - memory_profiler
+  - yaml
+  - pytables
+  - lxml
+  - powerplantmatching
+  - numpy
+  - pandas
+  - geopandas
+  - xarray
+  - netcdf4
+  - networkx
+  - scipy
+  - shapely
+  - progressbar2
+  - pyomo
+  - matplotlib
+  - proj
+
+  # Keep in conda environment when calling ipython
+  - ipython
+
+  # GIS dependencies:
+  - cartopy
+  - descartes
+  - rasterio
+
+  # PyPSA-Eur-Sec Dependencies
+  - geopy
+  - tqdm
+  - pytz
+  - country_converter
+  - tabula-py
+
+  # Visualisation
+  - sympy
+
+  - pip:
+    - vresutils
+    - tsam

@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: 2022 Koen van Greevenbroek & Aleksander Grochowicz
+#
+# SPDX-License-Identifier: CC0-1.0
+
+[submodule "pypsa-eur"]
+	path = workflow/modules/pypsa-eur-base
+	url = git@github.com:koen-vg/pypsa-eur

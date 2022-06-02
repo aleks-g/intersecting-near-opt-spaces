@@ -1,0 +1,827 @@
+# SPDX-FileCopyrightText: 2022 Koen van Greevenbroek & Aleksander Grochowicz
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+import os
+import yaml
+import shutil
+import snakemake
+from pathlib import Path
+
+from scripts._helpers import parse_year_wildcard
+from scripts.workflow_utilities import (
+    soft_copy_pypsa_eur,
+    validate_configs,
+    hash_config,
+    parse_net_spec,
+)
+
+from snakemake.utils import min_version
+
+# A recent version of snakemake is required for the module prefix
+# keyword support.
+min_version("7.0.1")
+
+# First, validate the configuration files to make sure we do not make
+# any silly mistakes.
+validate_configs("config")
+
+# Each snakemake run is defined by a named configuration file, which
+# is given as a command-line argument. This name is constant for the
+# whole snakemake run.
+run_name = config["name"]
+results_dir = "results/" + run_name
+networks_dir = "networks/" + run_name
+
+# Create cache folder with a hash so that we could reuse previous runs
+# with the same configuration and keep track of the configuration
+# files. Does not hash the values iterations, conv_epsilon,
+# conv_iterations of the "near_opt_approx" config.
+hash_run = hash_config(config)
+cache_dir = os.path.join("cache", run_name, hash_run)
+config_file = os.path.join(cache_dir, f"config-{run_name}.yaml")
+Path(cache_dir).mkdir(parents=True, exist_ok=True)
+with open(config_file, "w") as f:
+    yaml.dump(config, f)
+
+# The configuration contains a section of pypsa-eur config, which we
+# extract and put in a separate file.
+pypsa_eur_config = config["pypsa-eur"]
+
+# We use pypsa-eur as a module, but make sure that we have a separate
+# pypsa-eur instance for each named model run.
+pypsa_eur_base_dir = "workflow/modules/pypsa-eur-base"
+pypsa_eur_run_dir = f"workflow/modules/pypsa-eur-{run_name}"
+if not Path(pypsa_eur_run_dir).exists():
+    soft_copy_pypsa_eur(pypsa_eur_base_dir, pypsa_eur_run_dir)
+
+# For some reason, the workdir of a module must be relative to
+# this Snakefile (.), not the workdir of the current snakemake
+# workflow (..).
+pypsa_eur_run_dir_rel = f"modules/pypsa-eur-{run_name}"
+
+# Read the default pypsa-eur config, and use it as a base for the
+# user-supplied pypsa-eur config.
+with open(os.path.join(pypsa_eur_base_dir, "config.default.yaml"), "r") as f:
+    pypsa_eur_config = yaml.safe_load(f)
+snakemake.utils.update_config(pypsa_eur_config, config["pypsa-eur"])
+snakemake.utils.update_config(config["pypsa-eur"], pypsa_eur_config)
+
+
+# Define the pypsa-eur module.
+module pypsaeur:
+    snakefile:
+        os.path.join(pypsa_eur_run_dir_rel, "Snakefile")
+    config:
+        config["pypsa-eur"]
+    prefix:
+        pypsa_eur_run_dir
+
+
+use rule * from pypsaeur as pypsaeur_*
+
+
+wildcard_constraints:
+    # Wildcards from pypsa-eur:
+    simpl="[a-zA-Z0-9]*|all",
+    clusters="[0-9]+m?|all",
+    ll="(v|c)([0-9\.]+|opt|all)|all",
+    opts="[-+a-zA-Z0-9\.]*",
+    # The {year} wildcard represents a set of years and consists of a
+    # number of single years or ranges (of the form 2000-2020) all
+    # separated by `+`s. Example: "1980+1990-2000+2020".
+    year="([0-9]+)(-[0-9]+)?(\+([0-9]+)(-[0-9]+)?)*",
+    intersectionyears="([0-9]+)(-[0-9]+)?(\+([0-9]+)(-[0-9]+)?)*",
+    # MAA-related wildcards:
+    # {eps} for 'epsilon' is a floating point number, optionally
+    # followed by the suffix "uni<year>", where <year> conforms to the
+    # same format as the {year} wildcard. Examples: "0.15",
+    # "0.2uni1980-2020".
+    eps="[0-9\.]+(uni([0-9]+)(-[0-9]+)?(\+([0-9]+)(-[0-9]+)?)*)?",
+    # {epsf} for 'epsilon float' is just a floating point number, for
+    # when we want to exclude the possibility of a "uni" bound in the
+    # {eps} wildcard. Example: "0.15".
+    epsf="[0-9\.]+",
+    # {method} refers to a method of computing a robust solution, and
+    # allows a few different options. Example: "mean".
+    method="(exact|mean|naive|conservative)",
+    # {operation_method} determines how to operate networks; either
+    # normally or year-by-year (i.e. operate each year the network is
+    # defined over separately). In these cases the wildcard is empty
+    # or "-single-years" respectively.
+    operation_method="(-single-years)?",
+    # {with_budget} is a simple "flag" wildcard, indicating in the
+    # filename whether the operations of a network are solved with a
+    # budget or not.
+    with_budget="(_B)?",
+
+
+# Set the number of threads to use for network optimisations.
+# Note: This may need to be changed if a different solver than Gurobi is used.
+grb_threads = config["pypsa-eur"]["solving"]["solver"]["threads"]
+parallel_threads = grb_threads * config["near_opt_approx"]["num_parallel_solvers"]
+
+
+rule compute_all_near_opt:
+    input:
+        expand(
+            os.path.join(
+                results_dir,
+                "near_opt/{year}_{simpl}_{clusters}_l{ll}_{opts}_e{eps}.csv",
+            ),
+            **config["scenario"]
+        ),
+
+
+rule compute_all_intersections:
+    input:
+        expand(
+            os.path.join(
+                results_dir,
+                "intersection/{year}_{simpl}_{clusters}_l{ll}_{opts}_e{eps}.csv",
+            ),
+            **config["scenario"]
+        ),
+
+
+rule compute_all_robust:
+    input:
+        expand(
+            os.path.join(
+                results_dir,
+                "robust/{method}/{year}_{simpl}_{clusters}_l{ll}_{opts}_e{eps}.nc",
+            ),
+            **config["scenario"]
+        ),
+
+
+rule compute_all_robust_exact:
+    input:
+        expand(
+            os.path.join(
+                results_dir,
+                "robust/exact/{year}_{simpl}_{clusters}_l{ll}_{opts}_e{eps}.nc",
+            ),
+            **config["scenario"]
+        ),
+
+
+rule compute_all_robust_mean:
+    input:
+        expand(
+            os.path.join(
+                results_dir,
+                "robust/mean/{year}_{simpl}_{clusters}_l{ll}_{opts}_e{eps}.nc",
+            ),
+            **config["scenario"]
+        ),
+
+
+rule validate_robust:
+    input:
+        expand(
+            os.path.join(
+                results_dir,
+                "robust-summary{operation_method}/{year}_{simpl}_{clusters}_l{ll}_{opts}_e{eps}.csv",
+            ),
+            **config["scenario"]
+        ),
+
+
+rule validate_robust_with_budget:
+    input:
+        expand(
+            os.path.join(
+                results_dir,
+                "robust-summary{operation_method}_B/{year}_{simpl}_{clusters}_l{ll}_{opts}_e{eps}.csv",
+            ),
+            **config["scenario"]
+        ),
+
+
+rule validate_all:
+    input:
+        expand(
+            os.path.join(
+                results_dir,
+                "robust-validation-summary{operation_method}/{method}/{year}_{simpl}_{clusters}_l{ll}_{opts}_e{eps}.csv",
+            ),
+            **config["scenario"]
+        ),
+
+
+rule compute_all_optimum:
+    input:
+        expand(
+            os.path.join(
+                results_dir, "optimum/{year}_{simpl}_{clusters}_l{ll}_{opts}.nc"
+            ),
+            **config["scenario"]
+        ),
+
+
+def optimisation_memory(wildcards):
+    """Estimate the memory requirement for solving a model with the given wildcards.
+
+    This function assumes that the model is solved using Gurobi. The
+    formula results from the a simple regression on memory consumption
+    of models with a variety of different resolutions. The modelling
+    horizon is assumed to be one year.
+
+    We only consider model spatial and temporal resolution as relevant
+    factors for this computation.
+
+    The formula obtained by regression is the following:
+        -1035.4 - 4.59 g + 40.86 c + 92.34 (g+c) / h + 5564.72 / h
+    where g = simpl, c = clusters and h is the time resolution in
+    hours. We add 5% to this formula.
+
+    The code in inspired by the comparable functionality in pypsa-eur.
+    """
+    # Parse the network specs
+    s = parse_net_spec(wildcards.spec)
+    # Compute a multiplicative factor based on time resolution.
+    h = 1
+    for o in s["opts"].split("-"):
+        m = re.match(r"^(\d+)h$", o, re.IGNORECASE)
+        if m is not None:
+            h = int(m.group(1))
+            break
+
+    # Also divide this factor by the number of years the model runs over.
+    year = s["year"] if s["year"] else wildcards.year
+    num_years = len(parse_year_wildcard(year))
+    h = h / num_years
+
+    # Find the memory consumption based the spatial resolution (with
+    # hourly time resolution). This depends on both the 'simpl' and
+    # 'cluster' wildcards.
+    if s["clusters"].endswith("m"):
+        clusters = int(s["clusters"][:-1])
+        simpl = int(s["simpl"])
+    else:
+        clusters = int(s["clusters"])
+        simpl = clusters
+
+    mem = -1000 - 5 * simpl + 41 * clusters + 92 * (simpl + clusters) / h + 5600 / h
+    return 1.05 * mem
+
+
+def near_opt_memory(wildcards):
+    return config["near_opt_approx"].get(
+        "num_parallel_solvers", 1
+    ) * optimisation_memory(wildcards)
+
+
+rule compute_optimum:
+    input:
+        network=os.path.join(networks_dir, "{spec}.nc"),
+    output:
+        # Example: "optimum/1980-2020_181_90m_lcopt_Co2L-3H.nc"
+        #                   <------------spec------------->
+        optimum=os.path.join(results_dir, "optimum/{spec}.nc"),
+        obj=os.path.join(results_dir, "optimum/{spec}.obj"),
+        optimal_point=os.path.join(results_dir, "optimum/{spec}.csv"),
+    log:
+        os.path.join("logs", run_name, "optimum/{spec}.log"),
+    benchmark:
+        os.path.join("benchmarks", run_name, "optimum/{spec}.tsv")
+    conda:
+        "envs/maa.yaml"
+    resources:
+        mem_mb=optimisation_memory,
+    threads: grb_threads
+    script:
+        "scripts/compute_optimum.py"
+
+
+def calc_obj_bound_input(w):
+    return [
+        os.path.join(results_dir, f"optimum/{y}_{w.spec}.obj")
+        for y in parse_year_wildcard(w.year)
+    ]
+
+
+rule calc_obj_bound:
+    input:
+        calc_obj_bound_input,
+    output:
+        # Example: "obj_bound/181_90m_lcopt_Co2L-3H_e0.15uni1980-2020"
+        #                     <-------spec-------->  epsf   <-year-->
+        os.path.join(results_dir, "obj_bound/{spec}_e{epsf}uni{year}"),
+    resources:
+        mem_mb=10,
+    script:
+        "scripts/calc_obj_bound.py"
+
+
+def obj_bound_input(w):
+    # Depending on the type of epsilon specification, we either give a
+    # "uniform" objective bound (which will be the same for all years)
+    # or just the objective value.
+    if "uni" in w.eps:
+        return os.path.join(results_dir, f"obj_bound/{w.spec}_e{w.eps}")
+    else:
+        return os.path.join(results_dir, f"obj_bound/{w.spec}_e{w.eps}uni{w.year}")
+
+
+rule mga:
+    input:
+        network=os.path.join(networks_dir, "{year}_{spec}.nc"),
+        optimum=os.path.join(results_dir, "optimum/{year}_{spec}.csv"),
+        obj_bound=obj_bound_input,
+    output:
+        # Example: "mga/1980-2020_181_90m_lcopt_Co2L-3H_e0.2uni1980-2020.csv"
+        #               <-year--> <------spec--------->  <-----eps----->
+        mga_space=os.path.join(results_dir, "mga/{year}_{spec}_e{eps}.csv"),
+    log:
+        os.path.join("logs", run_name, "mga/{year}_{spec}_e{eps}.log"),
+        debug=directory(os.path.join("debug", run_name, "mga/{year}_{spec}_e{eps}")),
+    conda:
+        "envs/maa.yaml"
+    resources:
+        mem_mb=near_opt_memory,
+    threads: parallel_threads
+    script:
+        "scripts/mga.py"
+
+
+rule compute_near_opt:
+    input:
+        network=os.path.join(networks_dir, "{year}_{spec}.nc"),
+        mga_space=os.path.join(results_dir, "mga/{year}_{spec}_e{eps}.csv"),
+        obj_bound=obj_bound_input,
+    output:
+        # Example: "near_opt/1980-2020_181_90m_lcopt_Co2L-3H_e0.2uni1980-2020.csv"
+        #                    <-year--> <------spec--------->  <-----eps----->
+        near_opt=os.path.join(results_dir, "near_opt/{year}_{spec}_e{eps}.csv"),
+    log:
+        python=os.path.join("logs", run_name, "near_opt/{year}_{spec}_e{eps}.log"),
+        iterations=os.path.join("debug", run_name, "near_opt/{year}_{spec}_e{eps}"),
+        cache=os.path.join("cache", run_name, hash_run, "near_opt/{year}_{spec}_e{eps}"),
+    benchmark:
+        os.path.join("benchmarks", run_name, "near_opt/{year}_{spec}_e{eps}.tsv")
+    conda:
+        "envs/maa.yaml"
+    resources:
+        mem_mb=near_opt_memory,
+    threads: parallel_threads
+    script:
+        "scripts/compute_near_opt.py"
+
+
+def intersection_input_networks(w):
+    """Return the list of near-optimal spaces needed for an intersection."""
+    years = parse_year_wildcard(w.year)
+    # Format and return the list of file names.
+    return [
+        os.path.join(
+            results_dir,
+            f"near_opt/{y}_{w.spec}.csv",
+        )
+        for y in years
+    ]
+
+
+rule compute_intersection:
+    input:
+        hulls=intersection_input_networks,
+    output:
+        # Example: "intersection/1980-2020_181_90m_lcopt_Co2L-3H_e0.2uni1980-2020.csv"
+        #                        <-year--> <---------------spec----------------->
+        intersection=os.path.join(results_dir, "intersection/{year}_{spec}.csv"),
+        centre=os.path.join(results_dir, "intersection/centre_{year}_{spec}.csv"),
+        radius=os.path.join(results_dir, "intersection/radius_{year}_{spec}"),
+    log:
+        os.path.join("logs", run_name, "intersection/{year}_{spec}.log"),
+    conda:
+        "envs/maa.yaml"
+    resources:
+        mem_mb=1000,
+    script:
+        "scripts/intersect_near_optimal.py"
+
+
+# Rule to compute exact robust resolution, with total capacities given
+# by some centre.
+rule compute_robust_exact:
+    input:
+        network=os.path.join(networks_dir, "{year}_{spec}.nc"),
+        centre=os.path.join(
+            results_dir, "intersection/centre_{intersectionyears}_{spec}_e{eps}.csv"
+        ),
+    output:
+        # Example: "robust/exact/1980-2020_1989_181_90m_lcopt_Co2L-3H_e0.2uni1980-2020.nc"
+        #                        <-inter-> year <------spec--------->  <-----eps----->
+        network=os.path.join(
+            results_dir, "robust/exact/{intersectionyears}_{year}_{spec}_e{eps}.nc"
+        ),
+        operated_network=os.path.join(
+            results_dir,
+            "operations/robust/exact/{intersectionyears}_{year}_{spec}_e{eps}.nc",
+        ),
+        obj=os.path.join(
+            results_dir, "robust/exact/{intersectionyears}_{year}_{spec}_e{eps}.obj"
+        ),
+    log:
+        os.path.join(
+            "logs",
+            run_name,
+            "robust/exact/{intersectionyears}_{year}_{spec}_e{eps}.log",
+        ),
+    benchmark:
+        os.path.join(
+            "benchmarks",
+            run_name,
+            "robust/exact/{intersectionyears}_{year}_{spec}_e{eps}.tsv",
+        )
+    conda:
+        "envs/maa.yaml"
+    resources:
+        mem_mb=optimisation_memory,
+    threads: grb_threads
+    script:
+        "scripts/compute_robust_exact.py"
+
+
+# The following rule is for the special case of an exact robust
+# network operated over the same set of years as for which the
+# intersection is computed.
+rule compute_robust_exact_simple:
+    input:
+        os.path.join(results_dir, "robust/exact/{year}_{year}_{spec}_e{eps}.nc"),
+    output:
+        os.path.join(results_dir, "robust/exact/{year}_{spec}_e{eps}.nc"),
+    shell:
+        "cp {input} {output}"
+
+
+ruleorder: compute_robust_exact > compute_robust_exact_simple
+
+
+# Rule to compute heuristic robust allocation, with total capacities
+# given by some centre. As opposed to solving the network over the
+# full specified year range (with fixed given technology investment
+# bounds), this method computes exact robust solutions for the
+# individual given years, and combines these solutions heuristically.
+
+
+rule compute_robust_mean:
+    input:
+        network=os.path.join(networks_dir, "{intersectionyears}_{spec}.nc"),
+        centre=os.path.join(
+            results_dir, "intersection/centre_{intersectionyears}_{spec}_e{eps}.csv"
+        ),
+        # Collect all exact robust allocations for the single years in
+        # the period over which we compute a mean allocation
+        # ({intersectionyears}). Note that the single-year exact
+        # robust allocations are optimised over a single year ({y})
+        # but have coordinates corresponding to the centre point of
+        # the intersection of all near-optimal spaces in
+        # {intersectionyears}.
+        exact_robusts=lambda w: [
+            os.path.join(
+                results_dir,
+                f"robust/exact/{w.intersectionyears}_{y}_{w.spec}_e{w.eps}.nc",
+            )
+            for y in parse_year_wildcard(w.intersectionyears)
+        ],
+    output:
+        # Example: "robust/mean/1980-2020_181_90m_lcopt_Co2L-3H_e0.2uni1980-2020.nc"
+        #                       <-inter-> <-------spec-------->  <-----eps----->
+        network=os.path.join(
+            results_dir, "robust/mean/{intersectionyears}_{spec}_e{eps}.nc"
+        ),
+    log:
+        os.path.join(
+            "logs", run_name, "robust/mean/{intersectionyears}_{spec}_e{eps}.log"
+        ),
+    conda:
+        "envs/maa.yaml"
+    resources:
+        mem_mb=1000,
+    threads: 1
+    script:
+        "scripts/compute_robust_mean.py"
+
+
+# Calculate the most expensive year and the investment costs of it, so
+# that we can use it for the conservative and naive heuristic later.
+rule calc_most_expensive_year:
+    input:
+        lambda w: [
+            os.path.join(results_dir, f"optimum/{y}_{w.spec}.nc")
+            for y in parse_year_wildcard(w.year)
+        ],
+    output:
+        # Example: "networks/most-expensive_1980-2020_181_90m_lcopt_Co2L-3H.nc"
+        #                                   <-year--> <-------spec-------->
+        most_expensive_network=os.path.join(
+            results_dir, "networks/most-expensive_{year}_{spec}.nc"
+        ),
+        investment_cost=os.path.join(
+            results_dir, "networks/most-expensive_{year}_{spec}_investment"
+        ),
+    conda:
+        "envs/maa.yaml"
+    resources:
+        mem_mb=1000,
+    threads: 1
+    script:
+        "scripts/calc_most_expensive_year.py"
+
+
+rule compute_robust_naive:
+    input:
+        network=os.path.join(networks_dir, "{spec}.nc"),
+        most_expensive_network=os.path.join(
+            results_dir, "networks/most-expensive_{spec}.nc"
+        ),
+        robust_exact=os.path.join(results_dir, "robust/exact/{spec}_e{eps}.nc"),
+    output:
+        # Example: "robust/naive/1980-2020_181_90m_lcopt_Co2L-3H_e0.2uni1980-2020.nc"
+        #                        <-------------spec------------>  <-----eps----->
+        network=os.path.join(results_dir, "robust/naive/{spec}_e{eps}.nc"),
+    log:
+        os.path.join("logs", run_name, "robust/naive/{spec}_e{eps}.csv"),
+    conda:
+        "envs/maa.yaml"
+    resources:
+        mem_mb=100,
+    threads: 1
+    script:
+        "scripts/compute_robust_naive.py"
+
+
+def robust_conservative_memory(wildcards):
+    """Compute memory requirements for the following rule.
+
+    The requirements are the same as computed in
+    `optimisation_memory`, except just over a single year.
+    """
+    # We need to modify the year wildcard to be just a single year in
+    # order to get the correct memory calculation, since the
+    # conservative robust network is indeed computed by an
+    # optimisation with a single weather year.
+    w = copy.deepcopy(wildcards)
+    w.year = "0"
+    return optimisation_memory(w)
+
+
+rule compute_robust_conservative:
+    input:
+        network=os.path.join(networks_dir, "{year}_{spec}.nc"),
+        most_expensive_network=os.path.join(
+            results_dir, "networks/most-expensive_{year}_{spec}.nc"
+        ),
+        centre=os.path.join(results_dir, "intersection/centre_{year}_{spec}_e{eps}.csv"),
+    output:
+        # Example: "robust/conservative/1980-2020_181_90m_lcopt_Co2L-3H_e0.2uni1980-2020.nc"
+        #                               <-year--> <-------spec-------->  <-----eps----->
+        network=os.path.join(results_dir, "robust/conservative/{year}_{spec}_e{eps}.nc"),
+    log:
+        os.path.join("logs", run_name, "robust/conservative/{year}_{spec}_e{eps}.csv"),
+    conda:
+        "envs/maa.yaml"
+    resources:
+        mem_mb=robust_conservative_memory,
+    threads: grb_threads
+    script:
+        "scripts/compute_robust_conservative.py"
+
+
+def operations_memory(wildcards, attempt):
+    """Estimate the memory requirements for solving operations.
+
+    The wildcards are used to extract temporal and spatial resolution.
+    At first half the memory estimated by `optimsation_memory` is
+    used, and this is increased in successive attempts if snakemake is
+    run with the `--restart-times n` argument.
+
+    """
+    return attempt * 0.8 * optimisation_memory(wildcards)
+
+
+# Rule to solve operations of network with given capacities.
+rule solve_operations:
+    input:
+        network=os.path.join(results_dir, "{spec}.nc"),
+    output:
+        # Example: "operations-single-years/robust/mean/1980-2020_181_90m_lcopt_Co2L-3H_e0.2uni1980-2020.nc"
+        #                     <---op_m----> <----------------------------spec-------------------------->
+        network=os.path.join(results_dir, "operations{operation_method}/{spec}.nc"),
+    log:
+        os.path.join("logs", run_name, "operations{operation_method}/{spec}.log"),
+    benchmark:
+        os.path.join("benchmarks", run_name, "operations{operation_method}/{spec}.tsv")
+    conda:
+        "envs/maa.yaml"
+    resources:
+        mem_mb=operations_memory,
+    threads: grb_threads
+    script:
+        "scripts/solve_operations.py"
+
+
+# Rule to solve operations of network with given capacities, and a
+# fixed budget for operational costs. This rule can at the moment only
+# be used for solving the operations of different robust allocations,
+# since the operational budget itself comes from the operational costs
+# of the exact robust allocation. Note that we use the same script is
+# the above operations rule, but indicate to it that we want to
+# operate with a budget by using a parameter as a flag.
+
+
+rule solve_operations_with_budget:
+    input:
+        network=os.path.join(results_dir, "robust/{method}/{spec}.nc"),
+        op_bound_network=os.path.join(results_dir, "operations/robust/exact/{spec}.nc"),
+    output:
+        # Example: "operations-single-years_B/robust/mean/1980-2020_181_90m_lcopt_Co2L-3H_e0.2uni1980-2020.nc"
+        #                     <---op_m---->          --m- <---------------------spec--------------------->
+        network=os.path.join(
+            results_dir, "operations{operation_method}_B/robust/{method}/{spec}.nc"
+        ),
+    log:
+        os.path.join(
+            "logs",
+            run_name,
+            "operations{operation_method}_B/robust/{method}/{spec}.log",
+        ),
+    benchmark:
+        os.path.join(
+            "benchmarks",
+            run_name,
+            "operations{operation_method}_B/robust/{method}/{spec}.tsv",
+        )
+    conda:
+        "envs/maa.yaml"
+    resources:
+        mem_mb=operations_memory,
+    threads: grb_threads
+    script:
+        "scripts/solve_operations.py"
+
+
+# Some additional rules are needed for the "operation" of exact robust
+# networks. In fact, those networks are already operated when they are
+# generated (see the `compute_robust_exact` rule and script), so we
+# get the operations "for free" and just have to copy the network
+# files to the correct locations.
+
+
+rule copy_robust_exact_operations:
+    # This input comes directly from the output of the `compute_robust_exact` rule.
+    input:
+        os.path.join(results_dir, "operations/robust/exact/{year}_{spec}_e{eps}.nc"),
+    # We provide the operated network both as if it was operated with
+    # or without a budget: since it is the exact robust network this
+    # does not make a difference.
+    output:
+        os.path.join(
+            results_dir, "operations{with_budget}/robust/exact/{year}_{spec}_e{eps}.nc"
+        ),
+    shell:
+        "cp {input} {output}"
+
+
+ruleorder: compute_robust_exact > solve_operations
+ruleorder: copy_robust_exact_operations > solve_operations
+ruleorder: copy_robust_exact_operations > solve_operations_with_budget
+
+
+# Rule to prepare a directory of network files which are to be solved
+# in operations mode for validation. Since the exact number of naming
+# of the network files in the output directory may vary depending on
+# the configuration, this rule is a _checkpoint_, which means that the
+# snakemake rule DAG is re-computed after this rule has run. At that
+# point, snakemake finds our which networks (in the output directory)
+# to solve in operations mode for the validation summary.
+
+
+checkpoint prepare_validation:
+    input:
+        network=os.path.join(results_dir, "robust/{method}/{spec}.nc"),
+        intersection=os.path.join(results_dir, "intersection/{spec}.csv"),
+        centre=os.path.join(results_dir, "intersection/centre_{spec}.csv"),
+        radius=os.path.join(results_dir, "intersection/radius_{spec}"),
+    output:
+        # Example: "robust-validation/mean/1980-2020_181_90m_lcopt_Co2L-3H_e0.2uni1980-2020/"
+        #                             -m-- <---------------------spec--------------------->
+        directory(os.path.join(results_dir, "robust-validation/{method}/{spec}")),
+    log:
+        os.path.join("logs", run_name, "robust-validation/{method}/{spec}.log"),
+    conda:
+        "envs/maa.yaml"
+    resources:
+        mem_mb=1000,
+    threads: 1
+    script:
+        "scripts/prepare_validation.py"
+
+
+# The following rule collects the operated versions of the validation
+# networks produced by the `prepare_validation`-rule/checkpoint, and
+# outputs some statistics about the operations. The input function for
+# the summary rule reads the names of all networks produced by
+# `prepare_validation` using the `glob_wildcards` function, and gives
+# the names of the corresponding operated networks.
+
+
+def summarise_validation_input(wildcards):
+    validation_networks = checkpoints.prepare_validation.get(**wildcards).output[0]
+    return expand(
+        os.path.join(
+            results_dir,
+            "operations{operation_method}/robust-validation/{method}/{spec}/{n}.nc",
+        ),
+        method=wildcards.method,
+        operation_method=wildcards.operation_method,
+        spec=wildcards.spec,
+        n=glob_wildcards(os.path.join(validation_networks, "{n}.nc")).n,
+    )
+
+
+rule summarise_validation:
+    input:
+        summarise_validation_input,
+    output:
+        # Example: "robust-validation-summary-single-years/mean/1980-2020_181_90m_lcopt_Co2L-3H_e0.2uni1980-2020.csv"
+        #                                     <---op_m---> -m-- <--------------------spec---------------------->
+        summary=os.path.join(
+            results_dir,
+            "robust-validation-summary{operation_method}/{method}/{spec}.csv",
+        ),
+    log:
+        os.path.join(
+            "logs",
+            run_name,
+            "robust-validation-summary{operation_method}/{method}/{spec}.log",
+        ),
+    conda:
+        "envs/maa.yaml"
+    resources:
+        mem_mb=100,
+    threads: 1
+    script:
+        "scripts/summarise_feasibility.py"
+
+
+rule summarise_robust:
+    input:
+        [
+            os.path.join(
+                results_dir,
+                "operations{operation_method}{with_budget}/robust/" + m + "/{spec}.nc",
+            )
+            for m in config["scenario"]["method"]
+        ],
+    output:
+        summary=os.path.join(
+            results_dir, "robust-summary{operation_method}{with_budget}/{spec}.csv"
+        ),
+    log:
+        os.path.join(
+            "logs",
+            run_name,
+            "robust-summary{operation_method}{with_budget}/{spec}.log",
+        ),
+    conda:
+        "envs/maa.yaml"
+    resources:
+        mem_mb=100,
+    threads: 1
+    script:
+        "scripts/summarise_feasibility.py"
+
+
+# Rule to just generate all pypsa-eur subworkflow networks.
+rule build_all_pypsa_eur:
+    input:
+        expand(
+            os.path.join(networks_dir, "{year}_{simpl}_{clusters}_l{ll}_{opts}.nc"),
+            **config["scenario"]
+        ),
+
+
+# Rule to invoke the pypsa-eur subworkflow and copy the result to a
+# separate directory.
+rule build_network:
+    input:
+        os.path.join(
+            pypsa_eur_run_dir,
+            "networks/elec_{year}_s{simpl}_{clusters}_ec_l{ll}_{opts}.nc",
+        ),
+    output:
+        os.path.join(networks_dir, "{year}_{simpl}_{clusters}_l{ll}_{opts}.nc"),
+    shell:
+        "cp {input} {output}"
+
+
+rule link_load:
+    input:
+        "data/data/europe_demand_artificial_1980-2020.csv",
+    output:
+        os.path.join(pypsa_eur_run_dir, "resources/load.csv"),
+    shell:
+        "ln -s ../../../../{input} {output}"
