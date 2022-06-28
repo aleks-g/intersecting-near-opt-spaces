@@ -223,7 +223,7 @@ We use cost data as in the PyPSA-Eur, see [here](https://pypsa-eur.readthedocs.i
 
 We are using reanalysis data from ERA5 for the time period between 1980 and 2020, which covers the studied region in an hourly resolution. This is processed by atlite to generate capacity factor time series for solar PV, on- and offshore wind.
 Although the ERA5 data may be retrieved through the Copernicus API using Atlite, this takes a long time.
-Therefore we have also make the cutouts available at TODO add sigma2 link.
+Therefore we have also make the cutouts available at [DOI: 10.11582/2022.00034](https://www.doi.org/10.11582/2022.00034).
 By default these cutouts are downloaded automatically (only for the required set of years), but this can be controlled using the `config.pypsa-eur.enable.retrieve_cutout` configuration option.
 
 Preparing hydropower and load data for 1980-2020 required additional processing; the required code and documentation to reproduce these data can be found at [https://github.com/aleks-g/multidecade-data/tree/v1.0](https://github.com/aleks-g/multidecade-data/tree/v1.0).
