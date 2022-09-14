@@ -12,7 +12,7 @@ dependencies:
   - pip
   - mamba
 
-  - pypsa
+  - pypsa>=0.18.1,<=0.19.2
   - atlite
   - dask
 
