@@ -292,87 +292,105 @@ def compute_near_opt(
         # Process solver results as they are put into the queue.
         while True:
             p = queue.get()
-            logging.info(f"Finished iteration {num_iters}.")
-            num_iters += 1
-
-            # Scale the values for easier computations of the convex hull
-            # and proportions.
-            sp = list(p.values()) / scaling_ranges
-
-            # Add the point to the convex hull.
-            scaled_hull.add_points([sp])
-
-            # Compute new Chebyshev centre and radius. Include a sanity
-            # check that the radius does not decrease!
-            centre, radius, _ = ch_centre(scaled_hull)
-            old_radius = iteration_data.radius.iloc[-1]
-            if (old_radius - radius) / old_radius > 0.001:
-                logging.info("Radius decreased. Check what is going on?")
-
-            # Log the newly found point (together with the direction
-            # that generated it), both in cache and debug directories.
-            # These are non-scaled values. Note that the direction is
-            # already added at this point.
-            points.loc[points.index[-1] + 1] = p
-            for d in [cache_dir, debug_dir]:
-                points.to_csv(os.path.join(d, "points.csv"))
-                pd.DataFrame(probed_directions, columns=points.columns).to_csv(
-                    os.path.join(d, "probed_directions.csv")
-                )
-
-            # Also write additional information about the new centre
-            # point, radius and volume to the debug directory. These
-            # come from the scaled near-optimal space.
-            iteration_data.loc[iteration_data.index[-1] + 1] = np.hstack(
-                (centre, radius, scaled_hull.volume)
-            )
-            iteration_data.to_csv(os.path.join(debug_dir, "debug.csv"))
-
-            # Evaluate convergence criteria. We need at least 2
-            # iterations to do this.
-            if num_iters >= 2:
-                if conv_method == "volume":
-                    # Get array of volumes.
-                    volumes = iteration_data.volume.values
-                    # Compute percentage differences between iterations.
-                    conv_deltas_percent = (
-                        100 * (volumes[1:] - volumes[:-1]) / volumes[:-1]
-                    )
-                elif conv_method == "centre":
-                    # Compute a list of distances between the centres
-                    # from successive iterations.
-                    centres = list(iteration_data[list(points.columns)].values)
-                    centre_shifts = np.array(
-                        [dist(x, y) for x, y in zip(centres[1:], centres[:-1])]
-                    )
-                    # Calculate the percentage these distances make up
-                    # of the magnitude of the centre at each
-                    # iteration.
-                    norms = np.array([np.linalg.norm(c) for c in centres])
-                    conv_deltas_percent = 100 * centre_shifts / norms[:-1]
-
-                # Log the latest delta percentage.
+            if p is None:
+                # In this case the last optimisation was unsuccessful;
+                # this can happen sporadically due to, for example,
+                # numerical issues.
                 logging.info(
-                    "Latest convergence criteria (percent):"
-                    f" {conv_deltas_percent[-1]:.3}"
+                    f"Iteration {num_iters} unsuccessful: ignoring results and repeating."
+                )
+            else:
+                # This block is only executed if the last optimisation
+                # result was successful.
+                logging.info(f"Finished iteration {num_iters}.")
+                num_iters += 1
+
+                # Scale the values for easier computations of the convex hull
+                # and proportions.
+                sp = list(p.values()) / scaling_ranges
+
+                # Add the point to the convex hull.
+                scaled_hull.add_points([sp])
+
+                # Compute new Chebyshev centre and radius. Include a sanity
+                # check that the radius does not decrease!
+                centre, radius, _ = ch_centre(scaled_hull)
+                old_radius = iteration_data.radius.iloc[-1]
+                if (old_radius - radius) / old_radius > 0.001:
+                    logging.info("Radius decreased. Check what is going on?")
+
+                # Log the newly found point (together with the direction
+                # that generated it), both in cache and debug directories.
+                # These are non-scaled values. Note that the direction is
+                # already added at this point.
+                points.loc[points.index[-1] + 1] = p
+                for d in [cache_dir, debug_dir]:
+                    points.to_csv(os.path.join(d, "points.csv"))
+                    pd.DataFrame(probed_directions, columns=points.columns).to_csv(
+                        os.path.join(d, "probed_directions.csv")
+                    )
+
+                # Also write additional information about the new centre
+                # point, radius and volume to the debug directory. These
+                # come from the scaled near-optimal space.
+                iteration_data.loc[iteration_data.index[-1] + 1] = np.hstack(
+                    (centre, radius, scaled_hull.volume)
+                )
+                iteration_data.to_csv(os.path.join(debug_dir, "debug.csv"))
+
+                # Evaluate convergence criteria. We need at least 2
+                # iterations to do this.
+                if num_iters >= 2:
+                    if conv_method == "volume":
+                        # Get array of volumes.
+                        volumes = iteration_data.volume.values
+                        # Compute percentage differences between iterations.
+                        conv_deltas_percent = (
+                            100 * (volumes[1:] - volumes[:-1]) / volumes[:-1]
+                        )
+                    elif conv_method == "centre":
+                        # Compute a list of distances between the centres
+                        # from successive iterations.
+                        centres = list(iteration_data[list(points.columns)].values)
+                        centre_shifts = np.array(
+                            [dist(x, y) for x, y in zip(centres[1:], centres[:-1])]
+                        )
+                        # Calculate the percentage these distances make up
+                        # of the magnitude of the centre at each
+                        # iteration.
+                        norms = np.array([np.linalg.norm(c) for c in centres])
+                        conv_deltas_percent = 100 * centre_shifts / norms[:-1]
+
+                    # Log the latest delta percentage.
+                    logging.info(
+                        "Latest convergence criteria (percent):"
+                        f" {conv_deltas_percent[-1]:.3}"
+                    )
+
+                else:
+                    conv_deltas_percent = []
+
+                # If needed, we pad the `conv_deltas_percent` list in
+                # order to contain at least `conv_iter` elements.
+                conv_deltas_percent = np.concatenate(
+                    [
+                        (conv_iter - len(conv_deltas_percent)) * [np.inf],
+                        conv_deltas_percent,
+                    ]
                 )
 
-            else:
-                conv_deltas_percent = []
+                # End the approximation algorithm if we converge or reach
+                # the maximum number of iterations.
+                conv_crit = all(
+                    [d < conv_eps for d in conv_deltas_percent[-conv_iter:]]
+                )
+                if conv_crit or (num_iters >= max_iter):
+                    logging.info("Terminating pool.")
+                    pool.terminate()
+                    break
 
-            # If needed, we pad the `conv_deltas_percent` list in
-            # order to contain at least `conv_iter` elements.
-            conv_deltas_percent = np.concatenate(
-                [(conv_iter - len(conv_deltas_percent)) * [np.inf], conv_deltas_percent]
-            )
-
-            # End the approximation algorithm if we converge or reach
-            # the maximum number of iterations.
-            conv_crit = all([d < conv_eps for d in conv_deltas_percent[-conv_iter:]])
-            if conv_crit or (num_iters >= max_iter):
-                logging.info("Terminating pool.")
-                pool.terminate()
-                break
+            # The following is executed regardless of whether the last
+            # optimisation was successful or not.
 
             # Add additional jobs to the queue. Most of the time we
             # should only need to start _one_ additional worker (since
@@ -464,13 +482,20 @@ def solve_worker(
     # Do the optimisation in the given direction.
     t = time.time()
     r = copy.deepcopy(n)
-    solve_network_in_direction(r, dir, basis, obj_bound)
+    status, _ = solve_network_in_direction(r, dir, basis, obj_bound)
     solve_time = round(time.time() - t)
     print(f"{worker_name}: Finishing optimisation in {solve_time} seconds.")
 
-    # Put the result in the result queue.
-    queue.put(get_basis_values(r, basis))
-    return
+    # Put the result in the result queue if the optimisation was
+    # successful. If unsuccessful, put a None in the queue. This may
+    # happen sporadically due to, for example, numerical issues. Note
+    # that we do have to put _something_ in the queue, otherwise (and
+    # if there is only one parallel process) the main program loop
+    # will get stuck waiting for a result.
+    if status == "ok":
+        queue.put(get_basis_values(r, basis))
+    else:
+        queue.put(None)
 
 
 def large_facet_directions(

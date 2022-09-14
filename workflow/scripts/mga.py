@@ -106,9 +106,9 @@ def mga(
 
     # Collect all the resulting points in one dataframe. It is indexed
     # from -1, with the '-1'-th point being the optimum solution.
-    result_dfs = [pd.DataFrame(r, index=[0]) for r in results]
+    result_dfs = [pd.DataFrame(r, index=[0]) for r in results if r is not None]
     points = pd.concat([opt_point] + result_dfs, ignore_index=True)
-    points.index = range(-1, 2 * len(basis))
+    points.index = range(-1, len(result_dfs))
     return points
 
 
@@ -130,14 +130,21 @@ def mga_worker(
 
     # Solve the network.
     t = time.time()
-    solve_network_in_direction(n, direction, basis, obj_bound)
+    status, _ = solve_network_in_direction(n, direction, basis, obj_bound)
     solve_time = round(time.time() - t)
     print(f"{worker_name}: Finished solving for {description} in {solve_time} seconds")
 
     # Export the network for debug purposes.
     n.export_to_netcdf(os.path.join(debug_dir, f"{description}.nc"))
 
-    return get_basis_values(n, basis)
+    # If the solve was successful, return the results. Otherwise,
+    # return nothing. Unsuccessful solves can happen sporadically due
+    # to, for example, numerical issues.
+    if status == "ok":
+        return get_basis_values(n, basis)
+    else:
+        print("Optimisation unsuccessful: ignoring results.")
+        return None
 
 
 if __name__ == "__main__":

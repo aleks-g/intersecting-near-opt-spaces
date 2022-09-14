@@ -93,7 +93,9 @@ def get_basis_values(n: pypsa.Network, basis: OrderedDict, use_opt=True) -> Orde
     return basis_caps.project_to_coordinates()
 
 
-def get_basis_values_by_bus(n: pypsa.Network, basis: OrderedDict, labels: list, use_opt=True) -> OrderedDict:
+def get_basis_values_by_bus(
+    n: pypsa.Network, basis: OrderedDict, labels: list, use_opt=True
+) -> OrderedDict:
     """Get the coordinates of a solved PyPSA network `n` in the given basis.
 
     Only the coordinates given by the labels `labels` are returned;
@@ -495,7 +497,7 @@ def solve_network_in_direction(
 
     # Solve the network.
     time_before = time.time()
-    network_lopf(
+    status, termination_condition = network_lopf(
         n,
         solver_name=solver_name,
         solver_options=solver_options,
@@ -508,6 +510,11 @@ def solve_network_in_direction(
     # Calculate and print the time it took optimise the network.
     process_time = time_after - time_before
     logging.info(f"Network optimisation took {process_time:.2f} seconds.")
+
+    # Return the status and termination condition of the network
+    # solve, allowing the caller to deal with suboptimal and failed
+    # solves.
+    return status, termination_condition
 
 
 # This function is adapted from pypsa.linopf
