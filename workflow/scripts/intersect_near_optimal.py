@@ -22,7 +22,7 @@ if __name__ == "__main__":
 
     # Intersecting all convex hulls.
     logging.info("Trying to intersect all spaces.")
-    intersected_points = intersection(hulls=list_hulls)
+    intersected_points, centre, radius = intersection(hulls=list_hulls, return_centre=True)
     if intersected_points is None:
         raise RuntimeError(
             "No intersection was possible. Consider working with"
@@ -34,11 +34,9 @@ if __name__ == "__main__":
         snakemake.output.intersection
     )
 
-    # Compute the centre point of the intersection space, and output that too.
-    intersected_hull = ConvexHull(intersected_points)
-    intersected_centre, intersected_radius, _ = ch_centre(intersected_hull)
-    intersected_centre_df = pd.DataFrame(intersected_centre).T
-    intersected_centre_df.columns = points[0].columns
-    intersected_centre_df.to_csv(snakemake.output.centre)
+    # Also output the centre and radius.
+    centre_df = pd.DataFrame(centre).T
+    centre_df.columns = points[0].columns
+    centre_df.to_csv(snakemake.output.centre)
     with open(snakemake.output.radius, "w") as f:
-        f.write(str(intersected_radius))
+        f.write(str(radius))

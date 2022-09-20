@@ -21,85 +21,107 @@ import gurobipy as gp
 import numpy as np
 import scipy.linalg as linalg
 from gurobipy import GRB
-from scipy.spatial import ConvexHull
+from scipy.spatial import ConvexHull, HalfspaceIntersection
 from scipy.stats.qmc import LatinHypercube
 
 
-def intersection(
-    hulls: Collection[ConvexHull], max_iterations: int = 2000
-) -> Collection[float]:
+def intersection(hulls: Collection[ConvexHull], return_centre=False):
     """Compute an approximate intersection of a collection of convex hulls.
 
-    Specifically, we find a large number of points whose convex hull
-    approximates the intersection of the inputs. This is due to high
-    computational efforts to intersect many convex hulls
-    deterministically.
+    This function returns the vertices of (an approximation of) the
+    intersection of the given set of ConvexHull objects. The method is
+    to collect all linear constraints for all given convex hulls;
+    together these constraints exactly define the intersection of the
+    hulls. To compute the vertices of the intersection from the
+    constraints, we use qhull through the
+    scipy.spatial.HalfspaceIntersection interface. Internally, qhull
+    dualises the constaints to points and computes the convex hull of
+    these points, then dualises the facets back to points.
+
+    In dimension d, the convex hull of n vertices may consist of
+    O(n^floor(d/2)) facets; by duality n constraints can define a
+    polytope with O(n^floor(d/2)) vertices. Given that the input
+    convex hulls of this function may already have many facets, we
+    cannot hope to compute all vertices of the intersection.
+    Therefore, we make qhull compute a reasonable approximation. This
+    is controlled by the C, A and W options for qhull, which merge
+    nearby vertices, adjacent facets at a close-to-0 degree angle and
+    vertices close to facets respectively. The thresholds for merging
+    are set such that the approximation is accurate up to about
+    1/100th of the maximum width of the intersection in any dimension.
+
+    The intersection is returned as an array of vertices, one vertex
+    per row. Optionally, the Chebyshev centre and radius of the
+    intersection may be returned, since these are computed regardless
+    in the process of finding the intersection. See the documentation
+    of `ch_centre` for more details.
+
+    If the intersection cannot be found (for example, if it is empty),
+    None is returned.
 
     Parameters
     ----------
-    hulls: Collection[ConvexHull]
+    hulls : Collection[ConvexHull]
         Convex hulls to be intersected.
-    max_iterations: int = 2000
-        Maximal number of directions to be probed to approximate the intersection.
 
     Returns
     -------
-    points: Collection[float]
-        Approximation of the intersection of the given near-optimal feasible spaces.
+    points : np.array of shape (num_vertices, dims)
+        Approximation of the intersection of the given hulls.
+    centre : np.array of shape (dims,) (OPTIONAL)
+    radius : float (OPTIONAL)
 
     """
     # Gather the defining constraints of all the hulls.
     constraints = np.concatenate([h.equations for h in hulls])
     dims = constraints.shape[1] - 1
 
-    # Check that enough iterations are allowed.
-    if max_iterations < 2 * dims:
-        raise ValueError("Not enough iterations allowed.")
+    # Now, the input hulls may be very large, meaning the last column
+    # of the `constraints` matrix may be very large. For the sake of
+    # numerical stability and controlling the fidelity of convex hull
+    # approximation, we scale this colunm down to a managable
+    # magnitude, effectively scaling the sizes of the input polytopes
+    # down uniformly.
+    b_range = max(constraints[:, -1]) - min(constraints[:, -1])
+    scaled_constraints = np.copy(constraints)
+    scaled_constraints[:, -1] = constraints[:, -1] / b_range
 
-    # Check if the intersection is even nonempty.
-    if not is_nonempty(constraints):
+    # Find an interior point, needed to compute the intersection.
+    c, radius, _ = ch_centre_from_constraints(scaled_constraints)
+
+    # If such a point wasn't found, the intersection is empty (barring
+    # numerical trouble in finding the point.)
+    if c is None:
         logging.warning("The intersection is empty!")
-        return None
+        if return_centre:
+            return None, None, None
+        else:
+            return None
 
-    # Start by finding points in the cardinal directions.
-    m, _ = init_polytope(constraints)
-    card_points = []
-    card_directions = list(np.eye(dims)) + list(-np.eye(dims))
-    for dir in card_directions:
-        card_points.append(probe_polytope(m, dir))
-
-    # Now we scale the axes to make the width of intersection equal to
-    # 1 in each dimension.
-    maxs = np.array([max(p[i] for p in card_points) for i in range(dims)])
-    mins = np.array([min(p[i] for p in card_points) for i in range(dims)])
-    widths = maxs - mins
-    # Scale the columns of the constraint matrix by multiplying on the right.
-    scaled_constraints = np.matmul(constraints, np.diag(np.append(widths, 1)))
-    # Scale each point.
-    scaled_points = [p / widths for p in card_points]
-
-    # Initialise the (scaled) convex hull of the intersection.
-    scaled_m, _ = init_polytope(scaled_constraints)
-
-    # Initiate a random direction sampler.
-    sampler = uniform_random_hypersphere_sampler(dims)
-    directions = filter_vectors_auto(
-        sampler, init_angle=45, initial_vectors=card_directions, max_retries=10
+    # Compute the intersection (using qhull in the background). The
+    # option QJ "joggles" the input in order to circumvent precision
+    # problems, and the C, A and W options ensure that qhull only
+    # approximates the output, seeing as an exact answer may be too
+    # large (have too many points).
+    I = HalfspaceIntersection(
+        scaled_constraints, c, qhull_options="QJ C0.01 A0.99 W0.01"
     )
 
-    # Sample a given number of directions for the direction generator.
-    for dir in itertools.islice(directions, max_iterations):
-        scaled_points.append(probe_polytope(scaled_m, dir))
+    # Extract the vertices of the intersection. Confusingly those
+    # vertices are called "intersections" themselves, meaning
+    # intersections of the given halfspaces (constraints).
+    scaled_vertices = I.intersections
 
-    # Take the convex hull of the scaled points.
-    scaled_hull = ConvexHull(
-        scaled_points, incremental=True, qhull_options="Qx C-0.0001"
-    )
-    scaled_points = scaled_hull.points[scaled_hull.vertices]
+    # Scale everything back.
+    vertices = b_range * scaled_vertices
+    c = b_range * c
+    radius = b_range * radius
 
-    # Scaled the points back and return them.
-    points = np.matmul(scaled_points, np.diag(widths))
-    return points
+    # Return the vertices.
+    if return_centre:
+        return vertices, c, radius
+    else:
+        return vertices
 
 
 def ch_centre(hull: ConvexHull) -> (np.array, float, np.array):
@@ -134,36 +156,81 @@ def ch_centre(hull: ConvexHull) -> (np.array, float, np.array):
     of the above problem (in order of tightness) which are the facets
     touched by the Chebyshev ball.
 
+    Under the hood, uses the auxiliary function
+    `ch_centre_from_constraints`.
+
     Parameters
     ----------
     hull : scipy.spatial.ConvexHull
 
     Returns
     -------
-    centre : np.array of shape (num_dims,),
+    centre : np.array of shape (dims,),
     radius : float
-    tight_constraints : np.array
+    tight_constraints : np.array of shape (num_tight_constraints, dims)
 
     """
-    num_eqn = hull.equations.shape[0]
-    dims = hull.equations.shape[1] - 1
+    return ch_centre_from_constraints(hull.equations)
+
+
+def ch_centre_from_constraints(constraints: np.array) -> (np.array, float, np.array):
+    r"""Compute the Chebyshev centre of a polytope gives by constraints.
+
+    Each row R of `constraints` defines a linear equation of the form
+        R[:-1] * x <= -R[-1].
+    Note the minus sign on the right hand side: this follows qhulls
+    convention for specifying linear constraints. Together, all the
+    given constraints (rows of array `constraints`) may define a
+    bounded polytope. In this case, this function returns the
+    Chebyshev centre and radius of the polytope.
+
+    The final object to be returned is an array of all the tight
+    constraints on the Chebyshev ball, meaning the constraints
+    (hyperplanes) which "touch" the Chebyshev ball of the polytope.
+    They are sorted by their corresponding dual variables (non-zero
+    since these are tight constraints). The constraint with the
+    greatest dual variable (i.e. the "tightest" constraint) is the
+    first row of the array, and so on.
+
+    It is assumed that the normal vectors defined by the constraints
+    (i.e. `constraints[i, :-1]`) are each normalised. This is the case
+    with constraints obtained from qhull.
+
+    If the given constraints do not define a bounded polytope (for
+    instance, the polytope is empty or non-bounded), then None, None,
+    None is returned.
+
+    See the documentation of `ch_centre` for more details.
+
+    Parameters
+    ----------
+    constraints : np.array of shape (num_eqs, dims+1)
+
+    Returns
+    -------
+    centre : np.array of shape (dims),
+    radius : float
+    tight_constraints : np.array of shape (num_tight_constraints, dims)
+
+    """
+    num_eqn = constraints.shape[0]
+    dims = constraints.shape[1] - 1
 
     # Prepare the objective function, which just has a single
     # coefficient for the radius.
     objective = np.array(([0] * dims) + [1])
 
     # Get the constraints of the form (a_i**T, norm(a_i)) * (x, R) <=
-    # b_i. ConvexHull should normalise the vectors, so the norm is
-    # always 1.
-    A = np.hstack((hull.equations[:, :-1], np.ones(shape=(num_eqn, 1))))
-    b = -hull.equations[:, -1]  # note the sign coming from a qhull equation
+    # b_i. Note that we assume a_i to be normalised here.
+    A = np.hstack((constraints[:, :-1], np.ones(shape=(num_eqn, 1))))
+    b = -constraints[:, -1]  # note the sign coming from a qhull equation
 
     # Prepare variable lower bounds: we want coordinates to be
     # unbounded and the radius to be nonnegative. The upper bounds
     # are positive infinity by default, so we do not need to set them.
     lb = [[-GRB.INFINITY] * dims + [0]]
 
-    # Finally, solve the linear program.
+    # Solve the linear program.
     m = gp.Model()
     m.Params.OutputFlag = 0  # Do not log this optimisation.
     x = m.addMVar(shape=dims + 1, lb=lb)
@@ -175,7 +242,7 @@ def ch_centre(hull: ConvexHull) -> (np.array, float, np.array):
     good_codes = [gp.GRB.OPTIMAL, gp.GRB.SUBOPTIMAL]
     if m.status not in good_codes:
         logging.warning(
-            "ch_centre could not find centre point. Gurobi failed at"
+            "Could not find centre point. Gurobi failed at"
             f" optimisation with status code {m.status}."
         )
         return None, None, None
@@ -190,7 +257,7 @@ def ch_centre(hull: ConvexHull) -> (np.array, float, np.array):
     non_zero_dual_i = [i for i, d in duals if d != 0]
     tight_constraints = A[non_zero_dual_i, :-1]
 
-    # Return the results
+    # Return the results.
     return (centre, radius, tight_constraints)
 
 
@@ -199,8 +266,8 @@ def contains(hull: ConvexHull, point: np.array) -> bool:
 
     Parameters
     ----------
-    hull: scipy.spatial.ConvexHull
-    point: np.array
+    hull : scipy.spatial.ConvexHull
+    point : np.array
         Must be of the same dimension as the points consituting `hull`.
 
     Returns
