@@ -14,6 +14,7 @@ them as fixed constraints whereupon the network is solved.
 import copy
 import logging
 from collections import OrderedDict
+from pathlib import Path
 
 import pandas as pd
 import pypsa
@@ -48,6 +49,9 @@ def compute_robust(
     # Retrieve solver options from n.
     solver_options = n.config["solving"]["solver"].copy()
     solver_name = solver_options.pop("name")
+    tmpdir = n.config["solving"].get("tmpdir", None)
+    if tmpdir is not None:
+        Path(tmpdir).mkdir(parents=True, exist_ok=True)
 
     def set_coordinates(n, snapshots):
         """Extra functionality to set total capacities on pypsa-eur network."""
@@ -88,6 +92,7 @@ def compute_robust(
         solver_name=solver_name,
         solver_options=solver_options,
         extra_functionality=set_coordinates,
+        solver_dir=tmpdir,
     )
 
 
