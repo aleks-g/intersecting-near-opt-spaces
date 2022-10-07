@@ -8,7 +8,7 @@ import logging
 
 import pandas as pd
 from _helpers import configure_logging
-from geometry import ch_centre, intersection
+from geometry import intersection
 from scipy.spatial import ConvexHull
 
 if __name__ == "__main__":
@@ -22,7 +22,9 @@ if __name__ == "__main__":
 
     # Intersecting all convex hulls.
     logging.info("Trying to intersect all spaces.")
-    intersected_points, centre, radius = intersection(hulls=list_hulls, return_centre=True)
+    intersected_points, centre, radius = intersection(
+        hulls=list_hulls, return_centre=True
+    )
     if intersected_points is None:
         raise RuntimeError(
             "No intersection was possible. Consider working with"

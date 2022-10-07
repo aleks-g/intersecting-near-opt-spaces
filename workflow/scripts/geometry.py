@@ -12,7 +12,6 @@ based on facet normals, etc.)
 
 """
 
-import itertools
 import logging
 import math
 from typing import Collection, Iterable
@@ -74,7 +73,6 @@ def intersection(hulls: Collection[ConvexHull], return_centre=False):
     """
     # Gather the defining constraints of all the hulls.
     constraints = np.concatenate([h.equations for h in hulls])
-    dims = constraints.shape[1] - 1
 
     # Now, the input hulls may be very large, meaning the last column
     # of the `constraints` matrix may be very large. For the sake of
@@ -103,14 +101,14 @@ def intersection(hulls: Collection[ConvexHull], return_centre=False):
     # problems, and the C, A and W options ensure that qhull only
     # approximates the output, seeing as an exact answer may be too
     # large (have too many points).
-    I = HalfspaceIntersection(
+    hs = HalfspaceIntersection(
         scaled_constraints, c, qhull_options="QJ C0.01 A0.99 W0.01"
     )
 
     # Extract the vertices of the intersection. Confusingly those
     # vertices are called "intersections" themselves, meaning
     # intersections of the given halfspaces (constraints).
-    scaled_vertices = I.intersections
+    scaled_vertices = hs.intersections
 
     # Scale everything back.
     vertices = b_range * scaled_vertices
