@@ -819,11 +819,3 @@ rule build_network:
     shell:
         "cp {input} {output}"
 
-
-rule link_load:
-    input:
-        "data/data/europe_demand_artificial_1980-2020.csv",
-    output:
-        os.path.join(pypsa_eur_run_dir, "resources/load.csv"),
-    shell:
-        "ln -s ../../../../{input} {output}"
