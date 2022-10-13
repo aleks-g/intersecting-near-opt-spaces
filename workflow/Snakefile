@@ -287,7 +287,7 @@ rule compute_optimum:
     benchmark:
         os.path.join("benchmarks", run_name, "optimum/{spec}.tsv")
     conda:
-        "envs/maa.yaml"
+        "envs/maa.fixed.yaml"
     resources:
         mem_mb=optimisation_memory,
     threads: grb_threads
@@ -338,7 +338,7 @@ rule mga:
         os.path.join("logs", run_name, "mga/{year}_{spec}_e{eps}.log"),
         debug=directory(os.path.join("debug", run_name, "mga/{year}_{spec}_e{eps}")),
     conda:
-        "envs/maa.yaml"
+        "envs/maa.fixed.yaml"
     resources:
         mem_mb=near_opt_memory,
     # Make snakemake prioritise finishing these runs before compute_near_opt
@@ -364,7 +364,7 @@ rule compute_near_opt:
     benchmark:
         os.path.join("benchmarks", run_name, "near_opt/{year}_{spec}_e{eps}.tsv")
     conda:
-        "envs/maa.yaml"
+        "envs/maa.fixed.yaml"
     resources:
         mem_mb=near_opt_memory,
     threads: parallel_threads
@@ -397,7 +397,7 @@ rule compute_intersection:
     log:
         os.path.join("logs", run_name, "intersection/{year}_{spec}.log"),
     conda:
-        "envs/maa.yaml"
+        "envs/maa.fixed.yaml"
     resources:
         mem_mb=1000,
     script:
@@ -438,7 +438,7 @@ rule compute_robust_exact:
             "robust/exact/{intersectionyears}_{year}_{spec}_e{eps}.tsv",
         )
     conda:
-        "envs/maa.yaml"
+        "envs/maa.fixed.yaml"
     resources:
         mem_mb=optimisation_memory,
     threads: grb_threads
@@ -499,7 +499,7 @@ rule compute_robust_mean:
             "logs", run_name, "robust/mean/{intersectionyears}_{spec}_e{eps}.log"
         ),
     conda:
-        "envs/maa.yaml"
+        "envs/maa.fixed.yaml"
     resources:
         mem_mb=1000,
     threads: 1
@@ -525,7 +525,7 @@ rule calc_most_expensive_year:
             results_dir, "networks/most-expensive_{year}_{spec}_investment"
         ),
     conda:
-        "envs/maa.yaml"
+        "envs/maa.fixed.yaml"
     resources:
         mem_mb=1000,
     threads: 1
@@ -547,7 +547,7 @@ rule compute_robust_naive:
     log:
         os.path.join("logs", run_name, "robust/naive/{spec}_e{eps}.csv"),
     conda:
-        "envs/maa.yaml"
+        "envs/maa.fixed.yaml"
     resources:
         mem_mb=100,
     threads: 1
@@ -584,7 +584,7 @@ rule compute_robust_conservative:
     log:
         os.path.join("logs", run_name, "robust/conservative/{year}_{spec}_e{eps}.csv"),
     conda:
-        "envs/maa.yaml"
+        "envs/maa.fixed.yaml"
     resources:
         mem_mb=robust_conservative_memory,
     threads: grb_threads
@@ -617,7 +617,7 @@ rule solve_operations:
     benchmark:
         os.path.join("benchmarks", run_name, "operations{operation_method}/{spec}.tsv")
     conda:
-        "envs/maa.yaml"
+        "envs/maa.fixed.yaml"
     resources:
         mem_mb=operations_memory,
     threads: grb_threads
@@ -657,7 +657,7 @@ rule solve_operations_with_budget:
             "operations{operation_method}_B/robust/{method}/{spec}.tsv",
         )
     conda:
-        "envs/maa.yaml"
+        "envs/maa.fixed.yaml"
     resources:
         mem_mb=operations_memory,
     threads: grb_threads
@@ -714,7 +714,7 @@ checkpoint prepare_validation:
     log:
         os.path.join("logs", run_name, "robust-validation/{method}/{spec}.log"),
     conda:
-        "envs/maa.yaml"
+        "envs/maa.fixed.yaml"
     resources:
         mem_mb=1000,
     threads: 1
@@ -761,7 +761,7 @@ rule summarise_validation:
             "robust-validation-summary{operation_method}/{method}/{spec}.log",
         ),
     conda:
-        "envs/maa.yaml"
+        "envs/maa.fixed.yaml"
     resources:
         mem_mb=100,
     threads: 1
@@ -789,7 +789,7 @@ rule summarise_robust:
             "robust-summary{operation_method}{with_budget}/{spec}.log",
         ),
     conda:
-        "envs/maa.yaml"
+        "envs/maa.fixed.yaml"
     resources:
         mem_mb=100,
     threads: 1
@@ -818,4 +818,3 @@ rule build_network:
         os.path.join(networks_dir, "{year}_{simpl}_{clusters}_l{ll}_{opts}.nc"),
     shell:
         "cp {input} {output}"
-
