@@ -12,54 +12,16 @@ dependencies:
   - pip
   - mamba
 
-  - pypsa
-  - atlite
-  - dask
-
+  - pypsa>=0.18.1,<=0.19.2
   - gurobi
 
   # Dependencies of the workflow itself
-  - xlrd
-  - openpyxl
-  - pycountry
   - seaborn
-  - snakemake-minimal
-  - memory_profiler
   - yaml
-  - pytables
-  - lxml
-  - powerplantmatching
   - numpy
   - pandas
   - geopandas
-  - xarray
-  - netcdf4
-  - networkx
-  - scipy
-  - shapely
-  - progressbar2
-  - pyomo
-  - matplotlib
-  - proj
 
   # Keep in conda environment when calling ipython
   - ipython
 
-  # GIS dependencies:
-  - cartopy
-  - descartes
-  - rasterio
-
-  # PyPSA-Eur-Sec Dependencies
-  - geopy
-  - tqdm
-  - pytz
-  - country_converter
-  - tabula-py
-
-  # Visualisation
-  - sympy
-
-  - pip:
-    - vresutils
-    - tsam
