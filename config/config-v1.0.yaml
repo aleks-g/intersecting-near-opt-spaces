@@ -15,7 +15,7 @@ scenario:
   simpl: [""]
   clusters: ["35"]
   ll: ["copt"]
-  opts: ["Co2L-3H"]
+  opts: ["Co2L0.05-3H"]
   eps: ["0.05uni1980-2020"]
   method: ["mean", "exact", "naive", "conservative"]
   operation_method: [""] # empty if network files should be operated on all years altogether or '-single-years' when they should be operated year by year
