@@ -14,6 +14,7 @@ based on facet normals, etc.)
 
 import logging
 import math
+import time
 from typing import Collection, Iterable
 
 import gurobipy as gp
@@ -101,9 +102,11 @@ def intersection(hulls: Collection[ConvexHull], return_centre=False):
     # problems, and the C, A and W options ensure that qhull only
     # approximates the output, seeing as an exact answer may be too
     # large (have too many points).
-    hs = HalfspaceIntersection(
-        scaled_constraints, c, qhull_options="QJ C0.01 A0.99 W0.01"
-    )
+    logging.info("Starting Qhull halfspace intersection...")
+    t_start = time.time()
+    hs = HalfspaceIntersection(scaled_constraints, c, qhull_options="QJ C0.001")
+    t_stop = time.time()
+    logging.info(f"Halfspace intersection took {t_stop - t_start:.2f} seconds.")
 
     # Extract the vertices of the intersection. Confusingly those
     # vertices are called "intersections" themselves, meaning
