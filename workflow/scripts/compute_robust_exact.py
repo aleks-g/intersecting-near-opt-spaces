@@ -19,7 +19,7 @@ from pathlib import Path
 import pandas as pd
 import pypsa
 from _helpers import configure_logging
-from pypsa.linopf import network_lopf
+from pypsa.linopf import ilopf, network_lopf
 from pypsa.linopt import define_constraints, linexpr
 from solve_operations import set_extendable_false
 from utilities import apply_caps, get_basis_variables, set_nom_to_opt
@@ -29,7 +29,7 @@ def compute_robust(
     n: pypsa.Network,
     basis: OrderedDict,
     coordinates: dict,
-) -> None:
+) -> str:
     """Solve `n` with fixed coordinates in the given basis.
 
     That is, the network `n` is solved with additional constraints
@@ -45,8 +45,14 @@ def compute_robust(
     basis : OrderedDict
     coordinates: dict
 
+    Returns
+    -------
+    status : str
+        Optimisation status, `ok` if successful.
+
     """
     # Retrieve solver options from n.
+    solving_options = n.config["solving"]["options"]
     solver_options = n.config["solving"]["solver"].copy()
     solver_name = solver_options.pop("name")
     tmpdir = n.config["solving"].get("tmpdir", None)
@@ -87,13 +93,31 @@ def compute_robust(
     logging.info(
         f"Spreading the robust technology investment costs {coordinates} optimally."
     )
-    network_lopf(
-        n,
-        solver_name=solver_name,
-        solver_options=solver_options,
-        extra_functionality=set_coordinates,
-        solver_dir=tmpdir,
-    )
+    if solving_options.get("skip_iterations", False):
+        status, _ = network_lopf(
+            n,
+            solver_name=solver_name,
+            solver_options=solver_options,
+            solver_dir=tmpdir,
+            extra_functionality=set_coordinates,
+        )
+    else:
+        ilopf(
+            n,
+            solver_name=solver_name,
+            solver_options=solver_options,
+            solver_dir=tmpdir,
+            extra_functionality=set_coordinates,
+            track_iterations=solving_options.get("track_iterations", False),
+            min_iterations=solving_options.get("min_iterations", 1),
+            max_iterations=solving_options.get("max_iterations", 6),
+        )
+        # `ilopf` doesn't give us any optimisation status or
+        # termination condition, and simply crashes if any
+        # optimisation fails.
+        status = "ok"
+
+    return status
 
 
 if __name__ == "__main__":
@@ -114,32 +138,37 @@ if __name__ == "__main__":
     # example, later adding load shedding to an already-solved network
     # does no work as expected.
     r = copy.deepcopy(n)
-    compute_robust(
+    status = compute_robust(
         r,
         basis=snakemake.config["projection"],
         coordinates=coordinates,
     )
-    apply_caps(r, n)
 
-    # Set the nominal capacities of the network to the optimal
-    # capacities which were just computed.
-    set_nom_to_opt(n)
+    # Check that the optimisation was successful: if not we don't do
+    # anything, cause snakemake to consider this rule failed since no
+    # output was produced.
+    if status == "ok":
+        apply_caps(r, n)
 
-    # Export the network.
-    n.export_to_netcdf(snakemake.output.network)
+        # Set the nominal capacities of the network to the optimal
+        # capacities which were just computed.
+        set_nom_to_opt(n)
 
-    # Also export the "operated" network `r`, so we avoid repeating
-    # work down the road. We set everything to non-extendable to make
-    # it look like the results of the operations rule. However, we
-    # do not add load shedding. Also note that the objective value of
-    # this network will not be comparable to outputs from the
-    # `solve_operations` rule since it includes investment costs.
-    set_extendable_false(r)
-    r.export_to_netcdf(snakemake.output.operated_network)
+        # Export the network.
+        n.export_to_netcdf(snakemake.output.network)
 
-    # Export costs: note that these differ from the variables, as they
-    # include all technologies (and not only the projected ones) as
-    # well as all variable costs (which are not considered in the
-    # basis variables).
-    with open(snakemake.output.obj, "w") as f:
-        f.write(str(r.objective))
+        # Also export the "operated" network `r`, so we avoid repeating
+        # work down the road. We set everything to non-extendable to make
+        # it look like the results of the operations rule. However, we
+        # do not add load shedding. Also note that the objective value of
+        # this network will not be comparable to outputs from the
+        # `solve_operations` rule since it includes investment costs.
+        set_extendable_false(r)
+        r.export_to_netcdf(snakemake.output.operated_network)
+
+        # Export costs: note that these differ from the variables, as they
+        # include all technologies (and not only the projected ones) as
+        # well as all variable costs (which are not considered in the
+        # basis variables).
+        with open(snakemake.output.obj, "w") as f:
+            f.write(str(r.objective))

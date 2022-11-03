@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 import pypsa
 from pypsa.descriptors import get_active_assets, get_extendable_i, nominal_attrs
-from pypsa.linopf import network_lopf
+from pypsa.linopf import ilopf, network_lopf
 from pypsa.linopt import (
     define_constraints,
     get_var,
@@ -471,6 +471,7 @@ def solve_network_in_direction(
 
     """
     # Retrieve solver options from n.
+    solving_options = n.config["solving"]["options"]
     solver_options = n.config["solving"]["solver"].copy()
     solver_name = solver_options.pop("name")
     tmpdir = n.config["solving"].get("tmpdir", None)
@@ -495,16 +496,36 @@ def solve_network_in_direction(
         )
         write_objective(n, obj)
 
+        # Set a constant objective, which is useless in this case but expected by `ilopf`.
+        n.objective_constant = 0
+
     # Solve the network.
     time_before = time.time()
-    status, termination_condition = network_lopf(
-        n,
-        solver_name=solver_name,
-        solver_options=solver_options,
-        skip_objective=True,
-        solver_dir=tmpdir,
-        extra_functionality=extra_functionality,
-    )
+    if solving_options.get("skip_iterations", False):
+        status, termination_condition = network_lopf(
+            n,
+            solver_name=solver_name,
+            solver_options=solver_options,
+            skip_objective=True,
+            solver_dir=tmpdir,
+            extra_functionality=extra_functionality,
+        )
+    else:
+        ilopf(
+            n,
+            solver_name=solver_name,
+            solver_options=solver_options,
+            skip_objective=True,
+            solver_dir=tmpdir,
+            extra_functionality=extra_functionality,
+            track_iterations=solving_options.get("track_iterations", False),
+            min_iterations=solving_options.get("min_iterations", 1),
+            max_iterations=solving_options.get("max_iterations", 6),
+        )
+        # `ilopf` doesn't give us any optimisation status or
+        # termination condition, and simply crashes if any
+        # optimisation fails.
+        status, termination_condition = "ok", "optimal"
     time_after = time.time()
 
     # Calculate and print the time it took optimise the network.

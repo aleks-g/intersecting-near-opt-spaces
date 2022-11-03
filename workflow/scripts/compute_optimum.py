@@ -10,7 +10,7 @@ from pathlib import Path
 import pandas as pd
 import pypsa
 from _helpers import configure_logging
-from pypsa.linopf import network_lopf
+from pypsa.linopf import ilopf, network_lopf
 from utilities import get_basis_values
 
 if __name__ == "__main__":
@@ -19,7 +19,8 @@ if __name__ == "__main__":
 
     # Load the network and solving options.
     n = pypsa.Network(snakemake.input.network)
-    solver_options = snakemake.config["pypsa-eur"]["solving"]["solver"]
+    solving_options = snakemake.config["pypsa-eur"]["solving"]["options"]
+    solver_options = snakemake.config["pypsa-eur"]["solving"]["solver"].copy()
     solver_name = solver_options.pop("name")
     tmpdir = snakemake.config["pypsa-eur"]["solving"].get("tmpdir", None)
     if tmpdir is not None:
@@ -28,13 +29,27 @@ if __name__ == "__main__":
     # Solve the network for the cost optimum and then get its
     # coordinates in the basis.
     logging.info("Compute initial, optimal solution.")
-    status, _ = network_lopf(
-        n,
-        solver_name=solver_name,
-        solver_options=solver_options,
-        solver_dir=tmpdir,
-    )
-    opt_point = get_basis_values(n, snakemake.config["projection"])
+    if solving_options.get("skip_iterations", False):
+        status, _ = network_lopf(
+            n,
+            solver_name=solver_name,
+            solver_options=solver_options,
+            solver_dir=tmpdir,
+        )
+    else:
+        ilopf(
+            n,
+            solver_name=solver_name,
+            solver_options=solver_options,
+            solver_dir=tmpdir,
+            track_iterations=solving_options.get("track_iterations", False),
+            min_iterations=solving_options.get("min_iterations", 1),
+            max_iterations=solving_options.get("max_iterations", 6),
+        )
+        # `ilopf` doesn't give us any optimisation status or
+        # termination condition, and simply crashes if any
+        # optimisation fails.
+        status = "ok"
 
     # Check if the optimisation succeeded; if not we don't output
     # anything in order to make snakemake fail. Not checking for this
@@ -43,6 +58,7 @@ if __name__ == "__main__":
         # Write the result to the given output files. Save the objective
         # value for further processing.
         n.export_to_netcdf(snakemake.output.optimum)
+        opt_point = get_basis_values(n, snakemake.config["projection"])
         pd.DataFrame(opt_point, index=[0]).to_csv(snakemake.output.optimal_point)
         with open(snakemake.output.obj, "w") as f:
             f.write(str(n.objective))
