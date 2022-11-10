@@ -1,4 +1,8 @@
-name: base
+# SPDX-FileCopyrightText: 2022 Aleks Grochowicz & Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC0-1.0
+
+name: maa
 channels:
   - gurobi
   - conda-forge
