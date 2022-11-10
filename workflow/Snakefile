@@ -10,7 +10,6 @@ from pathlib import Path
 
 from scripts._helpers import parse_year_wildcard
 from scripts.workflow_utilities import (
-    soft_copy_pypsa_eur,
     validate_configs,
     hash_config,
     parse_net_spec,
@@ -44,38 +43,25 @@ Path(cache_dir).mkdir(parents=True, exist_ok=True)
 with open(config_file, "w") as f:
     yaml.dump(config, f)
 
-# The configuration contains a section of pypsa-eur config, which we
-# extract and put in a separate file.
-pypsa_eur_config = config["pypsa-eur"]
+# Extract the custom pypsa-eur config section from the top-level
+# workflow config, and update the "run" section.
+custom_pypsa_eur_config = config["pypsa-eur"]
+custom_pypsa_eur_config["run"] = {"name": run_name, "shared_cutouts": True}
 
-# We use pypsa-eur as a module, but make sure that we have a separate
-# pypsa-eur instance for each named model run.
-pypsa_eur_base_dir = "workflow/modules/pypsa-eur-base"
-pypsa_eur_run_dir = f"workflow/modules/pypsa-eur-{run_name}"
-if not Path(pypsa_eur_run_dir).exists():
-    soft_copy_pypsa_eur(pypsa_eur_base_dir, pypsa_eur_run_dir)
-
-# For some reason, the workdir of a module must be relative to
-# this Snakefile (.), not the workdir of the current snakemake
-# workflow (..).
-pypsa_eur_run_dir_rel = f"modules/pypsa-eur-{run_name}"
-
-# Read the default pypsa-eur config, and use it as a base for the
-# user-supplied pypsa-eur config.
-with open(os.path.join(pypsa_eur_base_dir, "config.default.yaml"), "r") as f:
+# Read the default pypsa-eur config, and update it using our custom config.
+with open("workflow/modules/pypsa-eur/config.default.yaml", "r") as f:
     pypsa_eur_config = yaml.safe_load(f)
-snakemake.utils.update_config(pypsa_eur_config, config["pypsa-eur"])
-snakemake.utils.update_config(config["pypsa-eur"], pypsa_eur_config)
+snakemake.utils.update_config(pypsa_eur_config, custom_pypsa_eur_config)
 
 
 # Define the pypsa-eur module.
 module pypsaeur:
     snakefile:
-        os.path.join(pypsa_eur_run_dir_rel, "Snakefile")
+        "modules/pypsa-eur/Snakefile"
     config:
-        config["pypsa-eur"]
+        pypsa_eur_config
     prefix:
-        pypsa_eur_run_dir
+        "workflow/modules/pypsa-eur"
 
 
 use rule * from pypsaeur as pypsaeur_*
@@ -810,10 +796,9 @@ rule build_all_pypsa_eur:
 # separate directory.
 rule build_network:
     input:
-        os.path.join(
-            pypsa_eur_run_dir,
-            "networks/elec_{year}_s{simpl}_{clusters}_ec_l{ll}_{opts}.nc",
-        ),
+        "workflow/modules/pypsa-eur/networks/"
+        + run_name
+        + "/elec_{year}_s{simpl}_{clusters}_ec_l{ll}_{opts}.nc",
     output:
         os.path.join(networks_dir, "{year}_{simpl}_{clusters}_l{ll}_{opts}.nc"),
     shell:

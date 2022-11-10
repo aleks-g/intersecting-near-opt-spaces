@@ -8,47 +8,11 @@
 import copy
 import hashlib
 import json
-import logging
 import os
 import re
-from os import symlink
-from os.path import basename, join
-from pathlib import Path
+from os.path import join
 
 import yaml
-
-
-def soft_copy_pypsa_eur(source: str, dest: str):
-    """Copy `source` to `dest` with symlinks, assuming pypsa-eur layout.
-
-    In particular, all workflow- and code files (Snakefile, scripts)
-    and constant data are symlinked. Some files and directories (.git,
-    test, etc.) which are not needed for the modelling workflow are
-    not copied at all.
-
-    Creates the symlinks assuming that `source` and `dest` are
-    adjacent directories.
-
-    """
-    if Path(dest).exists():
-        # If the destination already exists, does not do anything.
-        logging.warn("Attempting to copy pypsa-eur to existing destination.")
-        return
-
-    # Create top-level pypsa-eur directory.
-    Path(dest).mkdir(parents=True)
-
-    # Simple function to perform the symlink.
-    def do_symlink(name: str):
-        symlink(join("..", basename(source), name), join(dest, name))
-
-    # Symlink relevant files and directories.
-    do_symlink("Snakefile")
-    do_symlink("envs")
-    do_symlink("scripts")
-    do_symlink("data")
-    do_symlink("cutouts")
-    do_symlink("config.default.yaml")
 
 
 def validate_configs(config_dir: str):

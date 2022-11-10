@@ -1,1 +1,1 @@
-../modules/pypsa-eur-base/scripts/prepare_network.py
+../modules/pypsa-eur/scripts/prepare_network.py

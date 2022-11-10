@@ -105,17 +105,25 @@ pypsa-eur:
     co2limit: 1.0e+7
 
     extendable_carriers:
-      Generator: ["OCGT"]
+      Generator: ["solar", "onwind", "offwind-ac", "offwind-dc", "OCGT"]
       StorageUnit: ["battery", "H2"]
       Store: []
       Link: []
 
-    # Add existing nuclear power plants to the model, but no existing renewables.
-    conventional_carriers: ["nuclear"] # nuclear, oil, OCGT, CCGT, coal, lignite, geothermal, biomass
-    renewable_capacities_from_OPSD: [] # onwind, offwind, solar
+    # Use all renewable carriers
+    renewable_carriers: ["solar", "onwind", "offwind-ac", "offwind-dc", "hydro"]
+    # Add existing nuclear and biomass power plants to the model. Note
+    # that we do not include OCGT here, but since OCGT is defined as
+    # an extendable carrier, it will be added to the model at 0
+    # initial capacity.
+    conventional_carriers: ["nuclear", "biomass"] # nuclear, oil, OCGT, CCGT, coal, lignite, geothermal, biomass
 
     # Remove nuclear from Germany.
     powerplants_filter: "(Country != 'DE') or (Fueltype != 'Nuclear')"
+
+    # Make this a greenfield optimisation w.r.t. renewables.
+    estimate_renewable_capacities:
+      enable: false
 
   load:
     # Baseline in European Commission scenario from

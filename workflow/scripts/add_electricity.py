@@ -1,1 +1,1 @@
-../modules/pypsa-eur-base/scripts/add_electricity.py
+../modules/pypsa-eur/scripts/add_electricity.py
