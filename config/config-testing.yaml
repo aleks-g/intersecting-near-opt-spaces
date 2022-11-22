@@ -11,12 +11,12 @@ name: "testing"
 # specified for each wildcard; all combinations will be computed. See
 # the Snakefile for a description of each wildcard.
 scenario:
-  year: ["2000-2004"]
+  year: ["2000-2002"]
   simpl: [""]
   clusters: ["6"]
   ll: ["c1.25"]
   opts: ["Co2L-3H"]
-  eps: ["0.05uni2000-2004"]
+  eps: ["0.05uni2000-2002"]
   method: ["mean", "exact", "naive", "conservative"]
   operation_method: ["-single-years"]
 
@@ -43,12 +43,19 @@ near_opt_approx:
   # Convergence method, either "centre" or "volume".
   conv_method: "volume"
   # Convergence epsilon in percent.
-  conv_epsilon: 5
+  conv_epsilon: 2
   # Number of iterations for which the convergence criterion must be
   # below the converge epsilon before the approximation stops.
   conv_iterations: 10
 
   # Optional configuration:
+
+  # Performance settings for direct intersection approximation
+  # algorithm. Values default to `iterations` and
+  # `num_parallel_solvers` if not specified.
+  direct_intersection_iterations: 20
+  direct_intersection_parallel_solvers: 6
+
   
   # Command line options for the `qhull` program, which is used to
   # compute convex hulls, may be defined here. The default options
@@ -98,7 +105,7 @@ pypsa-eur:
   # to get the same network topology. Make sure you have the ERA5
   # cutout for this year (and the next, if `year_boundary` is not
   # "01-01").
-  net_clustering_year: "2019"
+  net_clustering_year: "2000"
 
   # For all the following configuration, see the PyPSA-Eur documentation.
   electricity:
@@ -161,7 +168,7 @@ pypsa-eur:
     solver:
       name: "gurobi"
       LogToConsole: 0
-      threads: 2
+      threads: 1
       method: 2 # barrier
       crossover: 0
       BarConvTol: 1.e-5

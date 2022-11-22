@@ -49,6 +49,12 @@ near_opt_approx:
   conv_iterations: 50
 
   # Optional configuration:
+
+  # Performance settings for direct intersection approximation
+  # algorithm. Values default to `iterations` and
+  # `num_parallel_solvers` if not specified.
+  # direct_intersection_iterations: 150
+  # direct_intersection_parallel_solvers: 4
   
   # Command line options for the `qhull` program, which is used to
   # compute convex hulls, may be defined here. The default options

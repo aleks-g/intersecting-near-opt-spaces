@@ -124,7 +124,7 @@ rule compute_all_intersections:
         expand(
             os.path.join(
                 results_dir,
-                "intersection/{year}_{simpl}_{clusters}_l{ll}_{opts}_e{eps}.csv",
+                "direct_intersection/{year}_{simpl}_{clusters}_l{ll}_{opts}_e{eps}.csv",
             ),
             **config["scenario"]
         ),
@@ -388,6 +388,66 @@ rule compute_intersection:
         mem_mb=1000,
     script:
         "scripts/intersect_near_optimal.py"
+
+
+def direct_intersection_input_networks(w):
+    """Return list of networks whose near-optimal spaces are to be intersected."""
+    years = parse_year_wildcard(w.year)
+    # Format and return the list of file names.
+    return [
+        os.path.join(
+            networks_dir,
+            f"{y}_{w.spec}.nc",
+        )
+        for y in years
+    ]
+
+
+def direct_intersection_input_spaces(w):
+    """Return list of "MGA" spaces to start a direct intersection computation."""
+    years = parse_year_wildcard(w.year)
+    # Format and return the list of file names.
+    return [
+        os.path.join(
+            results_dir,
+            f"mga/{y}_{w.spec}_e{w.eps}.csv",
+        )
+        for y in years
+    ]
+
+
+rule compute_intersection_direct:
+    input:
+        networks=direct_intersection_input_networks,
+        mga_spaces=direct_intersection_input_spaces,
+    output:
+        # Example: "direct_intersection/1980-2020_181_90m_lcopt_Co2L-3H_e0.2uni1980-2020.csv"
+        #                               <-year--> <-------spec-------->  <-----eps----->
+        intersection=os.path.join(
+            results_dir, "direct_intersection/{year}_{spec}_e{eps}.csv"
+        ),
+        centre=os.path.join(
+            results_dir, "direct_intersection/centre_{year}_{spec}_e{eps}.csv"
+        ),
+        radius=os.path.join(
+            results_dir, "direct_intersection/radius_{year}_{spec}_e{eps}"
+        ),
+    log:
+        python=os.path.join(
+            "logs", run_name, "direct_intersection/{year}_{spec}_e{eps}.log"
+        ),
+        iterations=os.path.join(
+            "debug", run_name, "direct_intersection/{year}_{spec}_e{eps}"
+        ),
+        cache=os.path.join(
+            "cache", run_name, hash_run, "direct_intersection/{year}_{spec}_e{eps}"
+        ),
+    conda:
+        "envs/maa.fixed.yaml"
+    resources:
+        mem_mb=1000,
+    script:
+        "scripts/direct_intersection.py"
 
 
 # Rule to compute exact robust resolution, with total capacities given

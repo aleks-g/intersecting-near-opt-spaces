@@ -341,6 +341,61 @@ def probe_polytope(m: gp.Model, direction: np.array) -> np.array:
         raise RuntimeError("Gurobi could not optimise over the given polytope.")
 
 
+def probe_intersection(spaces: List[ConvexHull], direction: np.array) -> int:
+    """Probe the intersection of given spaces, return index of hit space.
+
+    Let I be the intersection of the input `spaces`, and v a vertex
+    further in `direction` (a vertex obtained by optimising over I in
+    the given `direction`). This function returns the index of one of
+    the spaces whose constraints are tight at v. We choose the index
+    corresponding to the tightest constraint.
+
+    Parameters
+    ----------
+    spaces : List[ConvexHull]
+        The list of convex hull whose intersection we are interested
+        in. Hulls in dimension d.
+    direction : np.array
+        A length d array representing a direction in which to probe
+        the intersection.
+
+    Returns
+    -------
+    int
+        The index in input list `spaces` corresponding to a space with
+        tight constraints when optimising over the intersection of
+        `spaces` in the given `direction`.
+
+    """
+    # Prepare constraints for each of the given spaces.
+    As = [constraints[:, :-1] for constraints in spaces.equations]
+    bs = [-constraints[:, -1] for constraints in spaces.equations]
+    # Prepare the gurobi model
+    m = gp.Model()
+    m.Params.OutputFlag = 0  # Do not log anything related to this model.
+    lb = [[-GRB.INFINITY] * As[0].shape[1]]
+    # Add optimisation variable
+    x = m.addMVar(shape=As[0].shape[1], lb=lb)
+    # Add set of constraints for each given space
+    for i, (A, b) in enumerate(zip(As, bs)):
+        # We "label" this constraint as coming from space number i by
+        # giving it the name "i" (as a string). The name of the
+        # tightest constraint will later be returned as an int again.
+        m.addConstr(A @ x <= b, name=str(i))
+    m.setMObjective(None, direction, 0.0, None, None, None, GRB.MAXIMIZE)
+    m.optimize()
+    if m.Status == GRB.OPTIMAL:
+        # Get constraint with tightest dual variable. Here, c.pi is
+        # the dual value of a constraint.
+        tightest_constraint = max(m.getConstrs, key=lambda c: c.pi)
+        # The name of this constraint is the index that we want.
+        return int(tightest_constraint.name)
+    else:
+        raise RuntimeError(
+            "Gurobi could not optimise over intersection of given spaces."
+        )
+
+
 def facet_normals(convex_hull: ConvexHull) -> np.array:
     """Return the facet normals of a convex hull, sorted by facet size."""
     # Extract all facets of the convex hull by points and compute
