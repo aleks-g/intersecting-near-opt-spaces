@@ -27,12 +27,12 @@ near_opt_approx:
   
   # Direction generation method, either "facets", "random-uniform",
   # "random-lhc", "maximal-centre" or "maximal-centre-then-facets".
-  directions: "maximal-centre-then-facets"
+  directions: "random-uniform"
   # Minimum angle threshold between directions.
-  directions_angle_separation: 45
+  directions_angle_separation: 0
   # The number of parallel solvers used in the near-optimal feasible
   # space approximation.
-  num_parallel_solvers: 4
+  num_parallel_solvers: 8
 
   # Convergence configuration. All in all, the below means that the
   # near-optimal space approximation will terminate when the volume
@@ -43,18 +43,18 @@ near_opt_approx:
   # Convergence method, either "centre" or "volume".
   conv_method: "volume"
   # Convergence epsilon in percent.
-  conv_epsilon: 2
+  conv_epsilon: 0.1
   # Number of iterations for which the convergence criterion must be
   # below the converge epsilon before the approximation stops.
-  conv_iterations: 10
+  conv_iterations: 30
 
   # Optional configuration:
 
   # Performance settings for direct intersection approximation
   # algorithm. Values default to `iterations` and
   # `num_parallel_solvers` if not specified.
-  direct_intersection_iterations: 20
-  direct_intersection_parallel_solvers: 6
+  direct_intersection_iterations: 250
+  direct_intersection_parallel_solvers: 20
 
   
   # Command line options for the `qhull` program, which is used to
@@ -168,7 +168,7 @@ pypsa-eur:
     solver:
       name: "gurobi"
       LogToConsole: 0
-      threads: 1
+      threads: 2
       method: 2 # barrier
       crossover: 0
       BarConvTol: 1.e-5

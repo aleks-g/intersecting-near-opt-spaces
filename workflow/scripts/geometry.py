@@ -15,7 +15,7 @@ based on facet normals, etc.)
 import logging
 import math
 import time
-from typing import Collection, Iterable
+from typing import Collection, Iterable, List
 
 import gurobipy as gp
 import numpy as np
@@ -368,8 +368,8 @@ def probe_intersection(spaces: List[ConvexHull], direction: np.array) -> int:
 
     """
     # Prepare constraints for each of the given spaces.
-    As = [constraints[:, :-1] for constraints in spaces.equations]
-    bs = [-constraints[:, -1] for constraints in spaces.equations]
+    As = [space.equations[:, :-1] for space in spaces]
+    bs = [-space.equations[:, -1] for space in spaces]
     # Prepare the gurobi model
     m = gp.Model()
     m.Params.OutputFlag = 0  # Do not log anything related to this model.
@@ -387,9 +387,13 @@ def probe_intersection(spaces: List[ConvexHull], direction: np.array) -> int:
     if m.Status == GRB.OPTIMAL:
         # Get constraint with tightest dual variable. Here, c.pi is
         # the dual value of a constraint.
-        tightest_constraint = max(m.getConstrs, key=lambda c: c.pi)
+        tightest_constraint = max(m.getConstrs(), key=lambda c: c.pi)
         # The name of this constraint is the index that we want.
-        return int(tightest_constraint.name)
+        # Specifically, the name is of the form "i[j]" (as a string)
+        # where "i" is the index we want. We need to parse this string
+        # in some simple way.
+        i = tightest_constraint.getAttr("ConstrName").split("[")[0]
+        return int(i)
     else:
         raise RuntimeError(
             "Gurobi could not optimise over intersection of given spaces."
@@ -522,7 +526,7 @@ def filter_vectors(
         if not angle_threshold(vec, previous_vecs, angle):
             num_retries += 1
             continue
-        previous_vecs = np.vstack((previous_vecs, vec))
+        previous_vecs = np.vstack((previous_vecs, vec)) if previous_vecs else [vec]
         # Since we found a vector, reset the `num_retries` to 0.
         num_retries = 0
         yield vec
@@ -595,7 +599,9 @@ def filter_vectors_auto(
         if not angle_threshold(vec, previous_vecs, a):
             num_retries += 1
             continue
-        previous_vecs = np.vstack((previous_vecs, vec))
+        previous_vecs = (
+            np.vstack((previous_vecs, vec)) if len(previous_vecs) > 0 else [vec]
+        )
         # Since we found a vector, reset the `num_retries` to 0.
         num_retries = 0
         yield vec

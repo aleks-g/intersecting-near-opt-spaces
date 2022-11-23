@@ -33,6 +33,7 @@ from compute_near_opt import (
 from geometry import (
     ch_centre,
     filter_vectors_auto,
+    intersection,
     probe_intersection,
     uniform_random_hypersphere_sampler,
 )
@@ -73,7 +74,7 @@ def compute_intersection_direct(
     ----------
     networks : List[pypsa.Network]
         The networks whose near-optimal feasible spaces to intersect.
-    mga_spaces : List[pd.Dataframe]
+    mga_spaces : List[pd.DataFrame]
         The "MGA" spaces for the given networks, treated as crude
         first-order approximations of near-optimal spaces.
     obj_bound : float
@@ -148,15 +149,16 @@ def compute_intersection_direct(
     # Initialise the dataframe of points found by optimisations. Each
     # point is accompanied by the index of the network for which is
     # was computed.
-    points = pd.Dataframe(columns=["net_index", *mga_spaces[0].columns])
+    points = pd.DataFrame(columns=["net_index", *mga_spaces[0].columns])
 
     # Initialise proved directions. Initially empty.
+    # probed_directions = pd.DataFrame(colunms=points.columns)
     probed_directions = []
 
-    # Initialise a Dataframe for debug data for each iteration.
-    iteration_data = pd.DataFrame(
-        columns=["net_index", *points.columns, "radius", "volume"]
-    )
+    # Initialise a DataFrame for debug data for each iteration.
+    iteration_data = pd.DataFrame(columns=[*points.columns, "radius", "volume"])
+
+    num_iters = 0
 
     # If there are results in the cache from previous runs with the
     # same configuration, load those.
@@ -192,9 +194,22 @@ def compute_intersection_direct(
     # of the `iteration_data` DataFrame.
     if num_iters == 0:
         centre, radius, _ = ch_centre(A)
-        iteration_data.loc[-1] = np.hstack((centre, radius, A.volume))
+        iteration_data.loc[-1] = np.hstack((-1, centre, radius, A.volume))
 
     # Prepare the generator of directions to probe.
+
+    # TODO: need to adapt _all_ methods we use here to take index into
+    # account! (Optimisations in the same direction are fine as long
+    # as they are in different networks.) This could actually increase
+    # the complexity of generating new direction. The general strategy
+    # should be something like: (in a loop)
+    # 1. Generate an initial unfiltered candidate direction d,
+    # 2. Find the index i of network corresponding to d,
+    # 3. Filter d against probed directions _in the ith network_.
+    #   3(a) Potentially try some direction d against other networks
+    #        if they also have active constraints at vertex in
+    #        direction d.
+    # 4. Repeat from the top until direction has been found.
     if direction_method == "random-uniform":
         # Uniformly random directions.
         sampler = uniform_random_hypersphere_sampler(len(basis))
@@ -255,11 +270,21 @@ def compute_intersection_direct(
                     " solvers."
                 )
                 break
+
+        logging.info("Finished generating initial directions.")
+
         for d in directions:
-            # Solve in the generated directions. Note that the solver
-            # function itself will choose which network to solve in
-            # the given direction.
-            args = (queue, spaces, d, basis, obj_bound)
+            # Solve in the generated directions. First figure out
+            # which network we should optimise over. We use the
+            # `probe_intersection` function, which:
+            # 1. "Probes" the intersection in the given direction to see which
+            #    constraints are binding at the vertex furthest in that
+            #    direction.
+            # 2. Determines which of the spaces those binding constraints
+            #    belong to, and returns its index.
+            # Finally, we optimise the chosen network in the given direction.
+            idx = probe_intersection([F.space for F in spaces], d)
+            args = (queue, spaces[idx].net, idx, d, basis, obj_bound)
             results.append(pool.apply_async(solve_worker, args))
 
         # Process solver results as they are put into the queue.
@@ -280,13 +305,13 @@ def compute_intersection_direct(
 
                 # Unpack the result: it is a point and and index for
                 # which network this point was obtained.
-                p, i = result
+                i, p = result
 
                 # TODO: do we do scaling?
                 # sp = list(p.values()) / scaling_ranges
 
                 # Add the point to the convex hull of the 'i'th network.
-                spaces[i].space.add_points([p])
+                spaces[i].space.add_points([list(p.values())])
 
                 # Recompute the intersection of all the spaces.
                 A = ConvexHull(intersection([F.space for F in spaces]))
@@ -305,7 +330,11 @@ def compute_intersection_direct(
                 points.loc[len(points)] = [i, *p]
                 for d in [cache_dir, debug_dir]:
                     points.to_csv(os.path.join(d, "points.csv"))
-                    pd.DataFrame(probed_directions, columns=points.columns).to_csv(
+                    # TODO: right now "probed_directions" is a list
+                    # but it should probably be a dataframe or
+                    # something else keeping track of network indices
+                    # too.
+                    pd.DataFrame(probed_directions, columns=points.columns[1:]).to_csv(
                         os.path.join(d, "probed_directions.csv")
                     )
 
@@ -394,7 +423,8 @@ def compute_intersection_direct(
                     dir = next(dir_gen)
                     if dir is not None:
                         probed_directions.append(dir)
-                        args = (queue, spaces, dir, basis, obj_bound)
+                        idx = probe_intersection([F.space for F in spaces], dir)
+                        args = (queue, spaces[idx].net, idx, dir, basis, obj_bound)
                         results.append(pool.apply_async(solve_worker, args))
                     else:
                         # We've (possibly temporarily) ran out of
@@ -439,7 +469,8 @@ def compute_intersection_direct(
 
 def solve_worker(
     queue: Queue,
-    spaces: List[NearOpt],
+    n: pypsa.Network,
+    idx: int,
     dir: np.array,
     basis: OrderedDict,
     obj_bound: float,
@@ -449,18 +480,10 @@ def solve_worker(
     This function returns an extreme point of the reduce near-optimal
     feasible space of `n` in the direction `dir`.
 
-    """
-    # Figure out which network we should optimise over. We use the
-    # `probe_intersection` function, which:
-    # 1. "Probes" the intersection in the given direction to see which
-    #    constraints are binding at the vertex furthest in that
-    #    direction.
-    # 2. Determines which of the spaces those binding constraints
-    #    belong to, and returns its index.
-    # Finally, we optimise the chosen network in the given direction.
-    idx = probe_intersection([F.space for F in spaces], dir)
-    n = spaces[idx].net
+    Note that the `idx` argument isn't actually used in this function,
+    but put with the extreme point on the results queue as a label.
 
+    """
     # Log the start of this iteration. Note that we cannot really use
     # the `logging` package here since it is not process-safe, so we
     # just use a print statement. At least it lets the user know
@@ -575,7 +598,7 @@ if __name__ == "__main__":
         obj_bound = float(f.read())
 
     # Compute the near-optimal feasible space.
-    spaces, intersection = compute_intersection_direct(
+    spaces, A = compute_intersection_direct(
         networks,
         mga_spaces,
         obj_bound=obj_bound,
@@ -589,7 +612,7 @@ if __name__ == "__main__":
         conv_iter=int(snakemake.config["near_opt_approx"]["conv_iterations"]),
         max_iter=int(
             snakemake.config["near_opt_approx"].get(
-                ["direct_intersection_iterations"],
+                "direct_intersection_iterations",
                 snakemake.config["near_opt_approx"]["iterations"],
             )
         ),
@@ -604,17 +627,17 @@ if __name__ == "__main__":
     )
 
     # Put the vertices of `intersection` (which is given as a
-    # ConvexHull) in a Dataframe with properly labelled columns.
-    intersection_df = pd.Dataframe(intersection.vertices, columns=mga_spaces[0].columns)
+    # ConvexHull) in a DataFrame with properly labelled columns.
+    intersection_df = pd.DataFrame(A.points, columns=mga_spaces[0].columns)
 
     # Write the points defining the intersection to the given output
     # file.
-    intersection_df.to_csv(snakemake.output.intersecion)
+    intersection_df.to_csv(snakemake.output.intersection)
 
     # Also compute the centre point and radius and output those.
-    centre, radius, _ = ch_centre(intersection)
+    centre, radius, _ = ch_centre(A)
     centre_df = pd.DataFrame(centre).T
-    centre_df.columns = points[0].columns
+    centre_df.columns = mga_spaces[0].columns
     centre_df.to_csv(snakemake.output.centre)
     with open(snakemake.output.radius, "w") as f:
         f.write(str(radius))

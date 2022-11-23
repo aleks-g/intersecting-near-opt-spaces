@@ -420,6 +420,7 @@ rule compute_intersection_direct:
     input:
         networks=direct_intersection_input_networks,
         mga_spaces=direct_intersection_input_spaces,
+        obj_bound=obj_bound_input,
     output:
         # Example: "direct_intersection/1980-2020_181_90m_lcopt_Co2L-3H_e0.2uni1980-2020.csv"
         #                               <-year--> <-------spec-------->  <-----eps----->
