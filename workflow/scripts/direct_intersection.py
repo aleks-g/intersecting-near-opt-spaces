@@ -151,8 +151,8 @@ def compute_intersection_direct(
     # was computed.
     points = pd.DataFrame(columns=["net_index", *mga_spaces[0].columns])
 
-    # Initialise proved directions. Initially empty.
-    # probed_directions = pd.DataFrame(colunms=points.columns)
+    # Initialise probed directions. Initially empty.
+    # probed_directions = pd.DataFrame(columns=points.columns)
     probed_directions = []
 
     # Initialise a DataFrame for debug data for each iteration.

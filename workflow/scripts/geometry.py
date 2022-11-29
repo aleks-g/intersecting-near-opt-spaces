@@ -35,7 +35,7 @@ def intersection(hulls: Collection[ConvexHull], return_centre=False):
     hulls. To compute the vertices of the intersection from the
     constraints, we use qhull through the
     scipy.spatial.HalfspaceIntersection interface. Internally, qhull
-    dualises the constaints to points and computes the convex hull of
+    dualises the constraints to points and computes the convex hull of
     these points, then dualises the facets back to points.
 
     In dimension d, the convex hull of n vertices may consist of
@@ -353,7 +353,7 @@ def probe_intersection(spaces: List[ConvexHull], direction: np.array) -> int:
     Parameters
     ----------
     spaces : List[ConvexHull]
-        The list of convex hull whose intersection we are interested
+        The list of convex hulls whose intersection we are interested
         in. Hulls in dimension d.
     direction : np.array
         A length d array representing a direction in which to probe
