@@ -5,3 +5,6 @@
 [submodule "pypsa-eur"]
 	path = workflow/modules/pypsa-eur
 	url = git@github.com:koen-vg/pypsa-eur
+[submodule "pypsa-eur-sec"]
+	path = workflow/modules/pypsa-eur-sec
+	url = git@github.com:PyPSA/pypsa-eur-sec.git
