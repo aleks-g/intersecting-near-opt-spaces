@@ -28,28 +28,28 @@ The above map shows the differences in investment between a robust and an optima
 
 # Installation and usage
 
-The model is build using a snakemake workflow, and [PyPSA-Eur](https://github.com/PyPSA/pypsa-eur) is included as a submodule.
+The model is built using a snakemake workflow, and [PyPSA-Eur](https://github.com/PyPSA/pypsa-eur) and [PyPSA-Eur-Sec](https://github.com/PyPSA/pypsa-eur-sec) are included as git submodules and snakemake modules.
 
-1. Clone the git repository, making sure to also bring in the pypsa-eur submodule with `--recurse-submodules`:
+1. Clone the git repository, making sure to also bring in the pypsa-eur and pypsa-eur-sec submodules with `--recurse-submodules`:
 
    ```sh
-   git clone --recurse-submodules git@github.com:aleks-g/intersecting-near-opt-spaces
+   git clone --recurse-submodules git@github.com:aleks-g/intersecting-near-opt-spaces@sector-coupling.git
    ```
 
-2. Install Snakemake 7.0.1 or higher. The recommended way is using [mamba](https://mamba.readthedocs.io/en/latest/installation.html) to install snakemake into its own conda environment as follows:
+2. Install a patched version of snakemake which deals properly with nested modules. First install conda or [mamba](https://mamba.readthedocs.io/en/latest/installation.html), then build a conda environment containing the correct version of snakemake:
 
    ```sh
-   mamba create -c conda-forge -c bioconda -n snakemake 'snakemake>=7.0.1'
+   mamba env create -f workflow/envs/snakemake.yaml
    ```
 
-   Now activate the environment with `conda activate snakemake` and run `snakemake --version` to check that you have the correct version installed.
+   Now activate the environment with `conda activate snakemake_patched`.
 
-   See https://snakemake.readthedocs.io/en/stable/getting_started/installation.html for more detailed instructions.
+3. Place ERA5 cutouts produced by atlite in the `workflow/modules/pypsa-eur/cutouts` directory, following the naming scheme `europe-era5_{year}`. 
 
-3. Execute the full default model by running:
+4. Execute the full default sector-coupled model by running:
 
    ```sh
-   snakemake --configfile config/config-default.yaml --use-conda -j all -- compute_all_robust
+   snakemake --configfile config/config-default-sec.yaml --use-conda -j all -- compute_all_robust
    ```
 
    Other aggregate rules making use of the parameters in the `scenario` section of the configuration file include `compute_all_optimum`, `compute_all_near_opt`, `compute_all_intersections`, and `validate_all`. Alternatively, it is always possible to compute specific results by referring to their filenames directly, such as:
