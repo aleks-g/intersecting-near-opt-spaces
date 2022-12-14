@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2022 Aleks Grochowicz & Koen van Greevenbroek
+#
+# SPDX-License-Identifier: CC0-1.0
+
+name: snakemake_patched
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python>=3.11
+  - pip
+  - pip:
+    - git+https://github.com/koen-vg/snakemake.git@v7.19.1.2
