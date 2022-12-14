@@ -33,7 +33,7 @@ The model is built using a snakemake workflow, and [PyPSA-Eur](https://github.co
 1. Clone the git repository, making sure to also bring in the pypsa-eur and pypsa-eur-sec submodules with `--recurse-submodules`:
 
    ```sh
-   git clone --recurse-submodules git@github.com:aleks-g/intersecting-near-opt-spaces@sector-coupling.git
+   git clone -b sector-coupling --recurse-submodules git@github.com:aleks-g/intersecting-near-opt-spaces.git
    ```
 
 2. Install a patched version of snakemake which deals properly with nested modules. First install conda or [mamba](https://mamba.readthedocs.io/en/latest/installation.html), then build a conda environment containing the correct version of snakemake:
