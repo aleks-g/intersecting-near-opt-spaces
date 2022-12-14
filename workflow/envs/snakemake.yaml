@@ -8,6 +8,7 @@ channels:
   - bioconda
 dependencies:
   - python>=3.11
+  - mamba
   - pip
   - pip:
     - git+https://github.com/koen-vg/snakemake.git@v7.19.1.2
