@@ -8,11 +8,11 @@ import shutil
 import snakemake
 from pathlib import Path
 
-from scripts._helpers import parse_year_wildcard
 from scripts.workflow_utilities import (
     validate_configs,
     hash_config,
     parse_net_spec,
+    parse_year_wildcard,
 )
 
 from snakemake.utils import min_version
@@ -46,33 +46,58 @@ with open(config_file, "w") as f:
 # Extract the custom pypsa-eur config section from the top-level
 # workflow config, and update the "run" section.
 custom_pypsa_eur_config = config["pypsa-eur"]
-custom_pypsa_eur_config["run"] = {"name": run_name, "shared_cutouts": True}
+custom_pypsa_eur_config["run"]["name"] = run_name
+
+# Same for pypsa-eur-sec config
+custom_pypsa_eur_sec_config = config.get("pypsa-eur-sec", {})
+custom_pypsa_eur_sec_config["run"] = run_name
 
 # Read the default pypsa-eur config, and update it using our custom config.
 with open("workflow/modules/pypsa-eur/config.default.yaml", "r") as f:
     pypsa_eur_config = yaml.safe_load(f)
 snakemake.utils.update_config(pypsa_eur_config, custom_pypsa_eur_config)
 
+# Same for pypsa-eur-sec config
+with open("workflow/modules/pypsa-eur-sec/config.default.yaml", "r") as f:
+    pypsa_eur_sec_config = yaml.safe_load(f)
+snakemake.utils.update_config(pypsa_eur_sec_config, custom_pypsa_eur_sec_config)
+
+# Additionally, add the pypsa-eur config to the pypsa-eur-sec config too
+pypsa_eur_sec_config["pypsa_eur_config"] = pypsa_eur_config
+
 
 # Define the pypsa-eur module.
-module pypsaeur:
+# module pypsaeur:
+#     snakefile:
+#         "modules/pypsa-eur/Snakefile"
+#     config:
+#         pypsa_eur_config
+#     prefix:
+#         "workflow/modules/pypsa-eur"
+
+
+# Define the pypsa-eur-sec module.
+module pypsaeursec:
     snakefile:
-        "modules/pypsa-eur/Snakefile"
+        "modules/pypsa-eur-sec/Snakefile"
     config:
-        pypsa_eur_config
+        pypsa_eur_sec_config
     prefix:
-        "workflow/modules/pypsa-eur"
+        "workflow/modules/pypsa-eur-sec"
 
 
-use rule * from pypsaeur as pypsaeur_*
+# use rule * from pypsaeur as pypsaeur_*
+use rule * from pypsaeursec as pypsaeursec_*
 
 
 wildcard_constraints:
-    # Wildcards from pypsa-eur:
+    # Wildcards from pypsa-eur(-sec):
     simpl="[a-zA-Z0-9]*|all",
     clusters="[0-9]+m?|all",
     ll="(v|c)([0-9\.]+|opt|all)|all",
     opts="[-+a-zA-Z0-9\.]*",
+    sector_opts="[-+a-zA-Z0-9\.\s]*",
+    planning_horizons="[0-9]{4}|",
     # The {year} wildcard represents a set of years and consists of a
     # number of single years or ranges (of the form 2000-2020) all
     # separated by `+`s. Example: "1980+1990-2000+2020".
@@ -792,6 +817,17 @@ rule build_all_pypsa_eur:
         ),
 
 
+rule build_all_pypsa_eur_sec:
+    input:
+        expand(
+            os.path.join(
+                networks_dir,
+                "{year}_{simpl}_{clusters}_lv{ll}_{opts}_{sector_opts}_{planning_horizons}.nc",
+            ),
+            **config["scenario"]
+        ),
+
+
 # Rule to invoke the pypsa-eur subworkflow and copy the result to a
 # separate directory.
 rule build_network:
@@ -801,5 +837,18 @@ rule build_network:
         + "/elec_{year}_s{simpl}_{clusters}_ec_l{ll}_{opts}.nc",
     output:
         os.path.join(networks_dir, "{year}_{simpl}_{clusters}_l{ll}_{opts}.nc"),
+    shell:
+        "cp {input} {output}"
+
+
+rule build_network_sec:
+    input:
+        f"workflow/modules/pypsa-eur-sec/results/{run_name}/prenetworks/"
+        + "elec{year}_s{simpl}_{clusters}_lv{lv}_{opts}_{sector_opts}_{planning_horizons}.nc",
+    output:
+        os.path.join(
+            networks_dir,
+            "{year}_{simpl}_{clusters}_lv{lv}_{opts}_{sector_opts}_{planning_horizons}.nc",
+        ),
     shell:
         "cp {input} {output}"

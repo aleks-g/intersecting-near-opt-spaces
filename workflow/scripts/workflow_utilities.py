@@ -114,3 +114,32 @@ def parse_net_spec(spec: str) -> dict:
     )
     m = re.search(full_regex, spec)
     return m.groupdict()
+
+
+def parse_year_wildcard(w):
+    """
+    Parse a {year} wildcard to a list of years.
+
+    The wildcard can be of the form `1980+1990+2000-2002`; a set of
+    ranges (two years joined by a `-`) and individual years all
+    separated by `+`s. The above wildcard is parsed to the list [1980,
+    1990, 2000, 2001, 2002].
+    """
+    years = []
+    for rng in w.split("+"):
+        try:
+            if "-" in rng:
+                # `rng` is a range of years.
+                [start, end] = rng.split("-")
+                # Check that the range is well-formed.
+                if end < start:
+                    raise ValueError(f"Malformed range of years {rng}.")
+                # Add the range (inclusive) to the set of years.
+                years.extend(range(int(start), int(end) + 1))
+            else:
+                # `rng` is just a single year.
+                years.append(int(rng))
+        except ValueError:
+            raise ValueError(f"Illegal range of years {rng} encountered.")
+    # Sort the years before returning.
+    return sorted(years)
