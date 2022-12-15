@@ -19,7 +19,7 @@ scenario:
   opts: [""]
   sector_opts: ["Co2L0-3H-T-H-B-I-A-solar+p3-dist1"]
   planning_horizons: ["2030"]
-  eps: ["0.05uni1980-2019"]
+  eps: ["0.05uni1990+2000"]
   method: ["mean", "exact", "naive", "conservative"]
   operation_method: ["-single-years"]
 
