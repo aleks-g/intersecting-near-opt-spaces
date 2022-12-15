@@ -138,7 +138,7 @@ rule compute_all_near_opt:
         expand(
             os.path.join(
                 results_dir,
-                "near_opt/{year}_{simpl}_{clusters}_l{ll}_{opts}_e{eps}.csv",
+                "near_opt/{year}_{simpl}_{clusters}_lv{ll}_{opts}_{sector_opts}_{planning_horizons}_e{eps}.csv",
             ),
             **config["scenario"]
         ),
@@ -149,7 +149,7 @@ rule compute_all_intersections:
         expand(
             os.path.join(
                 results_dir,
-                "intersection/{year}_{simpl}_{clusters}_l{ll}_{opts}_e{eps}.csv",
+                "intersection/{year}_{simpl}_{clusters}_lv{ll}_{opts}_{sector_opts}_{planning_horizons}_e{eps}.csv",
             ),
             **config["scenario"]
         ),
@@ -160,7 +160,7 @@ rule compute_all_robust:
         expand(
             os.path.join(
                 results_dir,
-                "robust/{method}/{year}_{simpl}_{clusters}_l{ll}_{opts}_e{eps}.nc",
+                "robust/{method}/{year}_{simpl}_{clusters}_lv{ll}_{opts}_{sector_opts}_{planning_horizons}_e{eps}.nc",
             ),
             **config["scenario"]
         ),
@@ -171,7 +171,7 @@ rule compute_all_robust_exact:
         expand(
             os.path.join(
                 results_dir,
-                "robust/exact/{year}_{simpl}_{clusters}_l{ll}_{opts}_e{eps}.nc",
+                "robust/exact/{year}_{simpl}_{clusters}_lv{ll}_{opts}_{sector_opts}_{planning_horizons}_e{eps}.nc",
             ),
             **config["scenario"]
         ),
@@ -182,7 +182,7 @@ rule compute_all_robust_mean:
         expand(
             os.path.join(
                 results_dir,
-                "robust/mean/{year}_{simpl}_{clusters}_l{ll}_{opts}_e{eps}.nc",
+                "robust/mean/{year}_{simpl}_{clusters}_lv{ll}_{opts}_{sector_opts}_{planning_horizons}_e{eps}.nc",
             ),
             **config["scenario"]
         ),
@@ -193,7 +193,7 @@ rule validate_robust:
         expand(
             os.path.join(
                 results_dir,
-                "robust-summary{operation_method}/{year}_{simpl}_{clusters}_l{ll}_{opts}_e{eps}.csv",
+                "robust-summary{operation_method}/{year}_{simpl}_{clusters}_lv{ll}_{opts}_{sector_opts}_{planning_horizons}_e{eps}.csv",
             ),
             **config["scenario"]
         ),
@@ -204,7 +204,7 @@ rule validate_robust_with_budget:
         expand(
             os.path.join(
                 results_dir,
-                "robust-summary{operation_method}_B/{year}_{simpl}_{clusters}_l{ll}_{opts}_e{eps}.csv",
+                "robust-summary{operation_method}_B/{year}_{simpl}_{clusters}_lv{ll}_{opts}_{sector_opts}_{planning_horizons}_e{eps}.csv",
             ),
             **config["scenario"]
         ),
@@ -215,7 +215,7 @@ rule validate_all:
         expand(
             os.path.join(
                 results_dir,
-                "robust-validation-summary{operation_method}/{method}/{year}_{simpl}_{clusters}_l{ll}_{opts}_e{eps}.csv",
+                "robust-validation-summary{operation_method}/{method}/{year}_{simpl}_{clusters}_lv{ll}_{opts}_{sector_opts}_{planning_horizons}_e{eps}.csv",
             ),
             **config["scenario"]
         ),
@@ -225,7 +225,7 @@ rule compute_all_optimum:
     input:
         expand(
             os.path.join(
-                results_dir, "optimum/{year}_{simpl}_{clusters}_l{ll}_{opts}.nc"
+                results_dir, "optimum/{year}_{simpl}_{clusters}_lv{ll}_{opts}_{sector_opts}_{planning_horizons}.nc"
             ),
             **config["scenario"]
         ),
