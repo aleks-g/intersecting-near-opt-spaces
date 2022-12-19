@@ -150,7 +150,11 @@ parallel_threads = grb_threads * config["near_opt_approx"]["num_parallel_solvers
 
 # If we use PyPSA-Eur-Sec, it needs to override certain component attributes that are not used in PyPSA-Eur.
 # Define a variable to avoid the if/else for each rule where it is applicable.
-override_dir="workflow/modules/pypsa-eur-sec/data/override_component_attrs" if config["model"] == "pypsa-eur-sec" else "workflow/modules/pypsa-eur-sec/data/if-not-override"
+override_dir = (
+    "workflow/modules/pypsa-eur-sec/data/override_component_attrs"
+    if config["model"] == "pypsa-eur-sec"
+    else "workflow/modules/pypsa-eur-sec/data/if-not-override"
+)
 Path(override_dir).mkdir(parents=True, exist_ok=True)
 
 
@@ -316,8 +320,8 @@ def near_opt_memory(wildcards):
 
 rule compute_optimum:
     input:
-        overrides="workflow/modules/pypsa-eur-sec/data/override_component_attrs",
         network=os.path.join(networks_dir, "{spec}.nc"),
+        overrides=override_dir,
     output:
         # Example: "optimum/1980-2020_181_90m_lcopt_Co2L-3H.nc"
         #                   <------------spec------------->
@@ -372,6 +376,7 @@ rule mga:
         network=os.path.join(networks_dir, "{year}_{spec}.nc"),
         optimum=os.path.join(results_dir, "optimum/{year}_{spec}.csv"),
         obj_bound=obj_bound_input,
+        overrides=override_dir,
     output:
         # Example: "mga/1980-2020_181_90m_lcopt_Co2L-3H_e0.2uni1980-2020.csv"
         #               <-year--> <------spec--------->  <-----eps----->
@@ -395,6 +400,7 @@ rule compute_near_opt:
         network=os.path.join(networks_dir, "{year}_{spec}.nc"),
         mga_space=os.path.join(results_dir, "mga/{year}_{spec}_e{eps}.csv"),
         obj_bound=obj_bound_input,
+        overrides=override_dir,
     output:
         # Example: "near_opt/1980-2020_181_90m_lcopt_Co2L-3H_e0.2uni1980-2020.csv"
         #                    <-year--> <------spec--------->  <-----eps----->
@@ -454,6 +460,7 @@ rule compute_robust_exact:
         centre=os.path.join(
             results_dir, "intersection/centre_{intersectionyears}_{spec}_e{eps}.csv"
         ),
+        overrides=override_dir,
     output:
         # Example: "robust/exact/1980-2020_1989_181_90m_lcopt_Co2L-3H_e0.2uni1980-2020.nc"
         #                        <-inter-> year <------spec--------->  <-----eps----->
@@ -516,6 +523,7 @@ rule compute_robust_mean:
         centre=os.path.join(
             results_dir, "intersection/centre_{intersectionyears}_{spec}_e{eps}.csv"
         ),
+        overrides=override_dir,
         # Collect all exact robust allocations for the single years in
         # the period over which we compute a mean allocation
         # ({intersectionyears}). Note that the single-year exact
@@ -582,6 +590,7 @@ rule compute_robust_naive:
             results_dir, "networks/most-expensive_{spec}.nc"
         ),
         robust_exact=os.path.join(results_dir, "robust/exact/{spec}_e{eps}.nc"),
+        overrides=override_dir,
     output:
         # Example: "robust/naive/1980-2020_181_90m_lcopt_Co2L-3H_e0.2uni1980-2020.nc"
         #                        <-------------spec------------>  <-----eps----->
@@ -619,6 +628,7 @@ rule compute_robust_conservative:
             results_dir, "networks/most-expensive_{year}_{spec}.nc"
         ),
         centre=os.path.join(results_dir, "intersection/centre_{year}_{spec}_e{eps}.csv"),
+        overrides=override_dir,
     output:
         # Example: "robust/conservative/1980-2020_181_90m_lcopt_Co2L-3H_e0.2uni1980-2020.nc"
         #                               <-year--> <-------spec-------->  <-----eps----->
@@ -650,6 +660,7 @@ def operations_memory(wildcards, attempt):
 rule solve_operations:
     input:
         network=os.path.join(results_dir, "{spec}.nc"),
+        overrides=override_dir,
     output:
         # Example: "operations-single-years/robust/mean/1980-2020_181_90m_lcopt_Co2L-3H_e0.2uni1980-2020.nc"
         #                     <---op_m----> <----------------------------spec-------------------------->
@@ -680,6 +691,7 @@ rule solve_operations_with_budget:
     input:
         network=os.path.join(results_dir, "robust/{method}/{spec}.nc"),
         op_bound_network=os.path.join(results_dir, "operations/robust/exact/{spec}.nc"),
+        overrides=override_dir,
     output:
         # Example: "operations-single-years_B/robust/mean/1980-2020_181_90m_lcopt_Co2L-3H_e0.2uni1980-2020.nc"
         #                     <---op_m---->          --m- <---------------------spec--------------------->
