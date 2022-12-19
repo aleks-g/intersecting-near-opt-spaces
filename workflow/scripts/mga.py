@@ -24,7 +24,7 @@ import pandas as pd
 import pypsa
 from pypsa.components import component_attrs, components
 from _helpers import configure_logging
-from utilities import get_basis_values, solve_network_in_direction
+from utilities import get_basis_values, solve_network_in_direction, override_component_attrs
 
 
 def mga(
@@ -159,6 +159,7 @@ if __name__ == "__main__":
     # Load the network and solving options.
     overrides = override_component_attrs(snakemake.input.overrides)
     n = pypsa.Network(snakemake.input.network, override_component_attrs=overrides)
+
 
     # Attach solving configuration to the network.
     n.config = snakemake.config["pypsa-eur"]

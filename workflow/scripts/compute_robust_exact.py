@@ -24,7 +24,7 @@ from pypsa.components import component_attrs, components
 from pypsa.linopf import ilopf, network_lopf
 from pypsa.linopt import define_constraints, linexpr
 from solve_operations import set_extendable_false
-from utilities import apply_caps, get_basis_variables, set_nom_to_opt
+from utilities import apply_caps, get_basis_variables, set_nom_to_opt, override_component_attrs
 
 
 

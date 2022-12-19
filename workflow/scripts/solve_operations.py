@@ -34,7 +34,7 @@ from pypsa.descriptors import nominal_attrs
 from pypsa.linopf import network_lopf
 from pypsa.linopt import define_constraints, get_var, linexpr
 from pypsa.pf import get_switchable_as_dense as get_as_dense
-from utilities import set_nom_to_opt
+from utilities import set_nom_to_opt, override_component_attrs
 from workflow_utilities import parse_net_spec
 
 

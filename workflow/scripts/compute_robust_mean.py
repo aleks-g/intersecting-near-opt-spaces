@@ -18,7 +18,7 @@ import os.path
 import pypsa
 from pypsa.components import component_attrs, components
 from _helpers import configure_logging
-from utilities import add_caps, apply_caps, scale_caps
+from utilities import add_caps, apply_caps, scale_caps, override_component_attrs
 
 
 

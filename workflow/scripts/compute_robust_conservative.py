@@ -17,7 +17,7 @@ import pypsa
 from pypsa.components import component_attrs, components
 from _helpers import configure_logging
 from compute_robust_exact import compute_robust
-from utilities import apply_caps, set_nom_to_opt
+from utilities import apply_caps, set_nom_to_opt, override_component_attrs
 import os.path
 
 if __name__ == "__main__":
@@ -28,6 +28,7 @@ if __name__ == "__main__":
     overrides = override_component_attrs(snakemake.input.overrides)
     n = pypsa.Network(snakemake.input.network, override_component_attrs=overrides)
     n_exp = pypsa.Network(snakemake.input.most_expensive_network, override_component_attrs=overrides)
+    
     n_exp.config = snakemake.config["pypsa-eur"]
 
     # Load the projected centre (robust) solution coordinates.
