@@ -110,6 +110,7 @@ wildcard_constraints:
     simpl="[a-zA-Z0-9]*|all",
     clusters="[0-9]+m?|all",
     ll="(v|c)([0-9\.]+|opt|all)|all",
+    lv="[a-z0-9\.]+",
     opts="[-+a-zA-Z0-9\.]*",
     sector_opts="[-+a-zA-Z0-9\.\s]*",
     planning_horizons="[0-9]{4}|",
@@ -147,13 +148,27 @@ wildcard_constraints:
 grb_threads = config["pypsa-eur"]["solving"]["solver"]["threads"]
 parallel_threads = grb_threads * config["near_opt_approx"]["num_parallel_solvers"]
 
+# If we use PyPSA-Eur-Sec, it needs to override certain component attributes that are not used in PyPSA-Eur.
+# Define a variable to avoid the if/else for each rule where it is applicable.
+override_dir="workflow/modules/pypsa-eur-sec/data/override_component_attrs" if config["model"] == "pypsa-eur-sec" else "workflow/modules/pypsa-eur-sec/data/if-not-override"
+Path(override_dir).mkdir(parents=True, exist_ok=True)
+
+
+# For the following rules that expand scenario wildcards, the
+# wildcards can differ depending on whether we're using pypsa-eur or
+# pypsa-eur-sec as a backend model.
+if model["config"] == "pypsa-eur":
+    net_opts = "{year}_{simpl}_{clusters}_{ll}_{opts}"
+elif model["config"] == "pypsa-eur-sec":
+    net_opts = "{year}_{simpl}_{clusters}_{lv}_{opts}_{sector_opts}_{planning_horizons}"
+
 
 rule compute_all_near_opt:
     input:
         expand(
             os.path.join(
                 results_dir,
-                "near_opt/{year}_{simpl}_{clusters}_lv{ll}_{opts}_{sector_opts}_{planning_horizons}_e{eps}.csv",
+                "near_opt/" + net_opts + "_e{eps}.csv",
             ),
             **config["scenario"]
         ),
@@ -164,7 +179,7 @@ rule compute_all_intersections:
         expand(
             os.path.join(
                 results_dir,
-                "intersection/{year}_{simpl}_{clusters}_lv{ll}_{opts}_{sector_opts}_{planning_horizons}_e{eps}.csv",
+                "intersection/" + net_opts + "_e{eps}.csv",
             ),
             **config["scenario"]
         ),
@@ -175,7 +190,7 @@ rule compute_all_robust:
         expand(
             os.path.join(
                 results_dir,
-                "robust/{method}/{year}_{simpl}_{clusters}_lv{ll}_{opts}_{sector_opts}_{planning_horizons}_e{eps}.nc",
+                "robust/{method}/" + net_opts + "_e{eps}.nc",
             ),
             **config["scenario"]
         ),
@@ -186,7 +201,7 @@ rule compute_all_robust_exact:
         expand(
             os.path.join(
                 results_dir,
-                "robust/exact/{year}_{simpl}_{clusters}_lv{ll}_{opts}_{sector_opts}_{planning_horizons}_e{eps}.nc",
+                "robust/exact/" + net_opts + "_e{eps}.nc",
             ),
             **config["scenario"]
         ),
@@ -197,7 +212,7 @@ rule compute_all_robust_mean:
         expand(
             os.path.join(
                 results_dir,
-                "robust/mean/{year}_{simpl}_{clusters}_lv{ll}_{opts}_{sector_opts}_{planning_horizons}_e{eps}.nc",
+                "robust/mean/" + net_opts + "_e{eps}.nc",
             ),
             **config["scenario"]
         ),
@@ -208,7 +223,7 @@ rule validate_robust:
         expand(
             os.path.join(
                 results_dir,
-                "robust-summary{operation_method}/{year}_{simpl}_{clusters}_lv{ll}_{opts}_{sector_opts}_{planning_horizons}_e{eps}.csv",
+                "robust-summary{operation_method}/" + net_opts + "_e{eps}.csv",
             ),
             **config["scenario"]
         ),
@@ -219,7 +234,7 @@ rule validate_robust_with_budget:
         expand(
             os.path.join(
                 results_dir,
-                "robust-summary{operation_method}_B/{year}_{simpl}_{clusters}_lv{ll}_{opts}_{sector_opts}_{planning_horizons}_e{eps}.csv",
+                "robust-summary{operation_method}_B/" + net_opts + "_e{eps}.csv",
             ),
             **config["scenario"]
         ),
@@ -230,7 +245,9 @@ rule validate_all:
         expand(
             os.path.join(
                 results_dir,
-                "robust-validation-summary{operation_method}/{method}/{year}_{simpl}_{clusters}_lv{ll}_{opts}_{sector_opts}_{planning_horizons}_e{eps}.csv",
+                "robust-validation-summary{operation_method}/{method}/"
+                + net_opts
+                + "_e{eps}.csv",
             ),
             **config["scenario"]
         ),
@@ -239,9 +256,7 @@ rule validate_all:
 rule compute_all_optimum:
     input:
         expand(
-            os.path.join(
-                results_dir, "optimum/{year}_{simpl}_{clusters}_lv{ll}_{opts}_{sector_opts}_{planning_horizons}.nc"
-            ),
+            os.path.join(results_dir, "optimum/" + net_opts + ".nc"),
             **config["scenario"]
         ),
 
@@ -828,7 +843,7 @@ rule summarise_robust:
 rule build_all_pypsa_eur:
     input:
         expand(
-            os.path.join(networks_dir, "{year}_{simpl}_{clusters}_l{ll}_{opts}.nc"),
+            os.path.join(networks_dir, "{year}_{simpl}_{clusters}_{ll}_{opts}.nc"),
             **config["scenario"]
         ),
 
@@ -852,7 +867,7 @@ rule build_network:
         + run_name
         + "/elec_{year}_s{simpl}_{clusters}_ec_l{ll}_{opts}.nc",
     output:
-        os.path.join(networks_dir, "{year}_{simpl}_{clusters}_l{ll}_{opts}.nc"),
+        os.path.join(networks_dir, "{year}_{simpl}_{clusters}_{ll}_{opts}.nc"),
     shell:
         "cp {input} {output}"
 
@@ -864,7 +879,7 @@ rule build_network_sec:
     output:
         os.path.join(
             networks_dir,
-            "{year}_{simpl}_{clusters}_lv{lv}_{opts}_{sector_opts}_{planning_horizons}.nc",
+            "{year}_{simpl}_{clusters}_{lv}_{opts}_{sector_opts}_{planning_horizons}.nc",
         ),
     shell:
         "cp {input} {output}"
