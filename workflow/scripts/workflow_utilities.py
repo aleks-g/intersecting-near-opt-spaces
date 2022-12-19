@@ -101,6 +101,8 @@ def parse_net_spec(spec: str) -> dict:
         "clusters": r"[0-9]+m?|all",
         "ll": r"(v|c)([0-9\.]+|opt|all)|all",
         "opts": r"[-+a-zA-Z0-9\.]*",
+        "sector_opts": r"[-+a-zA-Z0-9\.]*",
+        "planning_horizon": r"[0-9]{4}|",
         "eps": r"[0-9\.]+(uni([0-9]+)(-[0-9]+)?(\+([0-9]+)(-[0-9]+)?)*)?",
     }
     # Make named groups our of the individual groups, such that e.g.
