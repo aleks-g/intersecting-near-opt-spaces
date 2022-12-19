@@ -25,15 +25,19 @@ are split into annual budgets.
 
 import logging
 from pathlib import Path
+import os.path
 
 import pypsa
 from _helpers import configure_logging, parse_year_wildcard
+from pypsa.components import component_attrs, components
 from pypsa.descriptors import nominal_attrs
 from pypsa.linopf import network_lopf
 from pypsa.linopt import define_constraints, get_var, linexpr
 from pypsa.pf import get_switchable_as_dense as get_as_dense
 from utilities import set_nom_to_opt
 from workflow_utilities import parse_net_spec
+
+
 
 marginal_attr = {"Generator": "p", "Link": "p", "Store": "p", "StorageUnit": "p"}
 
@@ -74,8 +78,9 @@ if __name__ == "__main__":
     if "snakemake" not in globals():
         configure_logging(snakemake)
 
-    # Load the network.
-    n = pypsa.Network(snakemake.input.network)
+    # Load the network and solving options.
+    overrides = override_component_attrs(snakemake.input.overrides)
+    n = pypsa.Network(snakemake.input.network, override_component_attrs=overrides)
 
     # Set nominal to optimal capacities.
     set_nom_to_opt(n)

@@ -10,18 +10,23 @@ exact solution. This serves as a baseline for comparing the allocation
 heuristics.
 
 """
+import os.path
 
 import pypsa
+from pypsa.components import component_attrs, components
 from _helpers import configure_logging
 from utilities import annual_investment_cost, apply_caps, scale_caps, set_nom_to_opt
+
+
 
 if __name__ == "__main__":
     # Set up logging so that everything is written to the right log file.
     configure_logging(snakemake)
 
-    # Load networks.
-    n = pypsa.Network(snakemake.input.network)
-    n_exp_year = pypsa.Network(snakemake.input.most_expensive_network)
+    # Load the network and solving options.
+    overrides = override_component_attrs(snakemake.input.overrides)
+    n = pypsa.Network(snakemake.input.network, override_component_attrs=overrides)
+    n_exp_year = pypsa.Network(snakemake.input.most_expensive_network, override_component_attrs=overrides)
     n_robust_exact = pypsa.Network(snakemake.input.robust_exact)
 
     # Get network capacities and the investment cost of extendable

@@ -15,14 +15,17 @@ import copy
 import logging
 from collections import OrderedDict
 from pathlib import Path
+import os.path
 
 import pandas as pd
 import pypsa
 from _helpers import configure_logging
+from pypsa.components import component_attrs, components
 from pypsa.linopf import ilopf, network_lopf
 from pypsa.linopt import define_constraints, linexpr
 from solve_operations import set_extendable_false
 from utilities import apply_caps, get_basis_variables, set_nom_to_opt
+
 
 
 def compute_robust(
@@ -124,8 +127,9 @@ if __name__ == "__main__":
     # Set up logging so that everything is written to the right log file.
     configure_logging(snakemake)
 
-    # Load the network.
-    n = pypsa.Network(snakemake.input.network)
+    # Load the network and solving options.
+    overrides = override_component_attrs(snakemake.input.overrides)
+    n = pypsa.Network(snakemake.input.network, override_component_attrs=overrides)
     n.config = snakemake.config["pypsa-eur"]
 
     # Load the projected centre (robust) solution coordinates.

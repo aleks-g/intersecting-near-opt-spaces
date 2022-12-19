@@ -14,17 +14,20 @@ that one should brace for the worst (=most expensive) year.
 
 import pandas as pd
 import pypsa
+from pypsa.components import component_attrs, components
 from _helpers import configure_logging
 from compute_robust_exact import compute_robust
 from utilities import apply_caps, set_nom_to_opt
+import os.path
 
 if __name__ == "__main__":
     # Set up logging so that everything is written to the right log file.
     configure_logging(snakemake)
 
-    # Load networks.
-    n = pypsa.Network(snakemake.input.network)
-    n_exp = pypsa.Network(snakemake.input.most_expensive_network)
+    # Load the networks and solving options.
+    overrides = override_component_attrs(snakemake.input.overrides)
+    n = pypsa.Network(snakemake.input.network, override_component_attrs=overrides)
+    n_exp = pypsa.Network(snakemake.input.most_expensive_network, override_component_attrs=overrides)
     n_exp.config = snakemake.config["pypsa-eur"]
 
     # Load the projected centre (robust) solution coordinates.

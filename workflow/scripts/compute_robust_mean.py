@@ -13,10 +13,13 @@ several optimisations with single weather years.
 
 from functools import reduce
 from typing import Collection
+import os.path
 
 import pypsa
+from pypsa.components import component_attrs, components
 from _helpers import configure_logging
 from utilities import add_caps, apply_caps, scale_caps
+
 
 
 def compute_robust_mean(
@@ -56,8 +59,9 @@ if __name__ == "__main__":
     # Set up logging so that everything is written to the right log file.
     configure_logging(snakemake)
 
-    # Load the network.
-    n = pypsa.Network(snakemake.input.network)
+    # Load the network and solving options.
+    overrides = override_component_attrs(snakemake.input.overrides)
+    n = pypsa.Network(snakemake.input.network, override_component_attrs=overrides)
 
     # Load the solved robust networks for individual years.
     exact_robusts = [pypsa.Network(r) for r in snakemake.input.exact_robusts]

@@ -6,14 +6,16 @@
 
 import logging
 from pathlib import Path
+import os.path
 
 import pandas as pd
 import pypsa
+from pypsa.components import component_attrs, components
 from _helpers import configure_logging
 from pypsa.linopf import ilopf, network_lopf
 from utilities import get_basis_values
-from pypsa.components import component_attrs, components
-import os.path
+
+
 
 # This function is stolen from pypsa-eur-sec/scripts/helper.py:
 def override_component_attrs(directory):

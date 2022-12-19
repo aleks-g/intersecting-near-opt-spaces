@@ -22,6 +22,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pypsa
+from pypsa.components import component_attrs, components
 from _helpers import configure_logging
 from utilities import get_basis_values, solve_network_in_direction
 
@@ -155,8 +156,9 @@ if __name__ == "__main__":
     pypsa_logger = logging.getLogger("pypsa")
     pypsa_logger.setLevel(logging.WARNING)
 
-    # Load the network.
-    n = pypsa.Network(snakemake.input.network)
+    # Load the network and solving options.
+    overrides = override_component_attrs(snakemake.input.overrides)
+    n = pypsa.Network(snakemake.input.network, override_component_attrs=overrides)
 
     # Attach solving configuration to the network.
     n.config = snakemake.config["pypsa-eur"]
