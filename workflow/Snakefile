@@ -25,6 +25,21 @@ min_version("7.0.1")
 # any silly mistakes.
 validate_configs("config")
 
+# Also, we force the user to specify the "model" option (set to either
+# "pypsa-eur" or "pypsa-eur-sec") and crash if it doesn't match the
+# model given in the config.
+if not "model_" in config:
+    # We already checked that the "model_" option is present in all
+    # config files in the validation above, so this must mean that the
+    # user didn't specify a config file on the command line.
+    raise ValueError(
+        "Could not find 'model_' option in config; did you specify a config file with the '--configfile [file]' command line option?"
+    )
+if not "model" in config or config["model"] != config["model_"]:
+    raise ValueError(
+        "Please specify on the command line which backend model you intend to use with '--config model=<...>'. Valid options are 'pypsa-eur' and 'pypsa-eur-sec'"
+    )
+
 # Each snakemake run is defined by a named configuration file, which
 # is given as a command-line argument. This name is constant for the
 # whole snakemake run.

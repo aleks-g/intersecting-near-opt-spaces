@@ -4,6 +4,7 @@
 
 # The name needs to match the filename of this config.
 name: "default"
+model_: "pypsa-eur"
 
 # The scenario config is used only in order to determine which results
 # are required for the various "*_all_*" Snakemake rules. Each entry

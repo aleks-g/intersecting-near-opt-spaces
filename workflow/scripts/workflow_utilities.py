@@ -37,6 +37,16 @@ def validate_configs(config_dir: str):
             raise ValueError(f"Config file {fn} does not have a name key.")
         if contents["name"] != name:
             raise ValueError(f"Config file {fn} has bad name key: {contents['name']}")
+        # Check that the config specifies the model used.
+        if "model_" not in contents:
+            raise ValueError(
+                f"Config file {fn} does not specify a model."
+                " Set the 'model_' option to 'pypsa-eur' or 'pypsa-eur-sec'."
+            )
+        if contents["model_"] not in ["pypsa-eur", "pypsa-eur-sec"]:
+            raise ValueError(
+                f"Config file {fn} had bad 'model_' config: {contents['model_']}"
+            )
         # Check for an easy mistake in projection specification: not
         # enabling the `scale_by_years` option.
         try:
