@@ -286,6 +286,7 @@ def near_opt_memory(wildcards):
 
 rule compute_optimum:
     input:
+        overrides="workflow/modules/pypsa-eur-sec/data/override_component_attrs",
         network=os.path.join(networks_dir, "{spec}.nc"),
     output:
         # Example: "optimum/1980-2020_181_90m_lcopt_Co2L-3H.nc"
