@@ -4,9 +4,11 @@ SPDX-FileCopyrightText: 2022 Koen van Greevenbroek & Aleksander Grochowicz
 SPDX-License-Identifier: CC-BY-4.0
 -->
 
+**Update** (December 2023): See also [this repository](https://github.com/koen-vg/enabling-agency) for a further developed version with the sector-coupled version accompanying [this preprint](https://arxiv.org/abs/2312.11264).
+
 # Introduction
 
-This repository contains the implementation of the methods presented in the paper [Intersecting near-optimal spaces: European power systems with more resilience to weather variability](https://arxiv.org/abs/2206.12242) (preprint).
+This repository contains the implementation of the methods presented in the paper [Intersecting near-optimal spaces: European power systems with more resilience to weather variability](https://doi.org/10.1016/j.eneco.2022.106496) published in Energy Economics.
 
 We incorporate several decades of weather data into [PyPSA-Eur](https://github.com/PyPSA/pypsa-eur) and compute solutions robust against weather variability using intersections of near-optimal spaces.
 The repository also builds on [load and hydro data](https://github.com/aleks-g/multidecade-data) representing the weather variability of the years 1980-2020.
@@ -15,7 +17,7 @@ For each weather year, we approximate (a projection of) the near-optimal feasibl
 We then intersect these near-optimal spaces to obtain solutions that are near-optimal and feasible for each year, making them robust.
 Inside the intersection (if it exists), we find a central solution which is designed to be resilient to perturbations.
 
-Our methods are introduced and explained in more detail in the [paper](https://arxiv.org/abs/2206.12242), and the implementation and data sources are elaborated on further down in this README.
+Our methods are introduced and explained in more detail in the [paper](https://doi.org/10.1016/j.eneco.2022.106496), and the implementation and data sources are elaborated on further down in this README.
 
 The approach can be extended to other uncertainties beyond weather and can thus generate allocations that show stability under different scenarios.
 
